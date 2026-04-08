@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "lib": ["ES2022", "DOM"],
+    "typeRoots": [
+      "./node_modules/@figma",
+      "./node_modules/@types"
+    ]
+  },
+  "include": ["src"]
+}
