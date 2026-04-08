@@ -1,0 +1,27 @@
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env.*.local
+apps/sync-server/.env
+
+# prisma
+apps/sync-server/prisma/migrations/
+
+# supabase
+supabase/.temp/
+
+# build output
+apps/figma-plugin/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

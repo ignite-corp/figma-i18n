@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Lokalise key 캐시 ───
+model LokaliseKeyCache {
+  id            String   @id @default(cuid())
+  lokaliseKeyId Int
+  projectId     String
+  keyName       String
+  baseValue     String
+  platforms     String[] @default([])
+  tags          String[] @default([])
+  isArchived    Boolean  @default(false)
+  fetchedAt     DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([projectId, lokaliseKeyId])
+  @@index([projectId])
+  @@index([keyName])
+  @@index([baseValue])
+  @@map("lokalise_key_cache")
+}
+
+// ─── Figma 노드 ↔ Lokalise key 매핑 ───
+model FigmaKeyMapping {
+  id          String        @id @default(cuid())
+  figmaFileId String
+  nodeId      String
+  projectId   String        // Lokalise project ID
+  keyName     String
+  sourceText  String
+  status      MappingStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([figmaFileId, nodeId])
+  @@index([keyName])
+  @@index([projectId])
+  @@map("figma_key_mapping")
+}
+
+enum MappingStatus {
+  ACTIVE
+  STALE
+  UNLINKED
+}
+
+// ─── 동기화 이력 ───
+model SyncHistory {
+  id          String     @id @default(cuid())
+  figmaFileId String
+  nodeId      String?
+  keyName     String
+  action      SyncAction
+  prevValue   String?
+  newValue    String?
+  triggeredBy String
+  metadata    Json?
+  createdAt   DateTime   @default(now())
+
+  @@index([figmaFileId])
+  @@index([keyName])
+  @@index([createdAt])
+  @@map("sync_history")
+}
+
+enum SyncAction {
+  KEY_CREATED
+  KEY_LINKED
+  SOURCE_UPDATED
+  KEY_UNLINKED
+  IGNORED
+}
+
+// ─── 공통 문구 사전 (DB 관리) ───
+model CommonDictionary {
+  id          String   @id @default(cuid())
+  text        String   @unique
+  keyName     String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("common_dictionary")
+}
+
+// ─── 캐시 메타데이터 ───
+model CacheMeta {
+  id         String      @id @default("lokalise_keys")
+  lastSyncAt DateTime?
+  totalKeys  Int         @default(0)
+  status     CacheStatus @default(IDLE)
+  updatedAt  DateTime    @updatedAt
+
+  @@map("cache_meta")
+}
+
+enum CacheStatus {
+  IDLE
+  SYNCING
+  ERROR
+}

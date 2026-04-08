@@ -1,0 +1,23 @@
+{
+  "name": "figma-i18n",
+  "private": true,
+  "packageManager": "pnpm@10.24.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:server": "turbo run dev --filter=sync-server",
+    "dev:plugin": "turbo run dev --filter=figma-plugin",
+    "build": "turbo run build",
+    "build:server": "turbo run build --filter=sync-server",
+    "build:plugin": "turbo run build --filter=figma-plugin",
+    "lint": "turbo run lint",
+    "db:generate": "pnpm --filter sync-server exec prisma generate",
+    "db:migrate": "pnpm --filter sync-server exec prisma migrate dev",
+    "db:push": "pnpm --filter sync-server exec prisma db push"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.0"
+  }
+}
