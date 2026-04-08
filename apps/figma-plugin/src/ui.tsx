@@ -172,7 +172,7 @@ async function handleSync() {
 
 // ─── Rendering ───
 function render() {
-  const root = document.getElementById("root")!;
+  const root = document.getElementById("create-figma-plugin")!;
 
   const filtered =
     activeFilter === "all"
@@ -338,7 +338,7 @@ function renderNewKeyInput(result: ScanResultNode): string {
 }
 
 function renderEmpty(message: string) {
-  document.getElementById("root")!.innerHTML = `
+  document.getElementById("create-figma-plugin")!.innerHTML = `
     <div class="container">
       <div class="server-config">
         <label>Server URL</label>
@@ -361,7 +361,7 @@ function renderEmpty(message: string) {
 }
 
 function renderError(message: string) {
-  document.getElementById("root")!.innerHTML = `
+  document.getElementById("create-figma-plugin")!.innerHTML = `
     <div class="container">
       <div class="server-config">
         <label>Server URL</label>
@@ -386,7 +386,7 @@ function renderError(message: string) {
 function setLoading(loading: boolean) {
   isLoading = loading;
   if (loading) {
-    document.getElementById("root")!.innerHTML = `
+    document.getElementById("create-figma-plugin")!.innerHTML = `
       <div class="container"><div class="loading">⏳ 처리 중...</div></div>
     `;
   }
