@@ -4,6 +4,7 @@ import type {
   SyncRequest,
   SyncResponse,
   CacheStatusResponse,
+  CacheRefreshResponse,
   KeySearchResponse,
 } from "shared-types";
 
@@ -60,6 +61,14 @@ export async function syncItems(body: SyncRequest): Promise<SyncResponse> {
 /** 캐시 상태 조회 */
 export async function getCacheStatus(): Promise<CacheStatusResponse> {
   return request<CacheStatusResponse>("/api/cache/status");
+}
+
+/** 캐시 강제 갱신 */
+export async function refreshCache(projectId?: string): Promise<CacheRefreshResponse> {
+  return request<CacheRefreshResponse>("/api/cache/refresh", {
+    method: "POST",
+    body: JSON.stringify(projectId ? { projectId } : {}),
+  });
 }
 
 /** Key 검색 */
