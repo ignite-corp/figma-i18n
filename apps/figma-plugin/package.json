@@ -3,16 +3,28 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "node esbuild.config.mjs --watch",
-    "build": "node esbuild.config.mjs"
+    "dev": "build-figma-plugin --typecheck --watch",
+    "build": "build-figma-plugin --typecheck --minify"
   },
   "dependencies": {
-    "shared-types": "workspace:*"
+    "shared-types": "workspace:*",
+    "@create-figma-plugin/utilities": "^3.2.0"
   },
   "devDependencies": {
+    "@create-figma-plugin/build": "^3.2.0",
+    "@create-figma-plugin/tsconfig": "^3.2.0",
     "@figma/plugin-typings": "^1.104.0",
-    "esbuild": "^0.25.0",
-    "typescript": "^5.8.0",
-    "@types/node": "^22.0.0"
+    "typescript": "^5.8.0"
+  },
+  "figma-plugin": {
+    "editorType": ["figma", "dev"],
+    "id": "figma-i18n-sync-plugin",
+    "name": "Figma i18n Sync",
+    "main": "src/main.ts",
+    "ui": "src/ui.tsx",
+    "networkAccess": {
+      "allowedDomains": ["*"],
+      "reasoning": "Sync server 통신을 위해 필요"
+    }
   }
 }

@@ -1,12 +1,1 @@
-{
-  "name": "Figma i18n Sync",
-  "id": "figma-i18n-sync-plugin",
-  "api": "1.0.0",
-  "main": "dist/main.js",
-  "ui": "dist/ui.html",
-  "editorType": ["figma", "dev"],
-  "networkAccess": {
-    "allowedDomains": ["*"],
-    "reasoning": "Sync server 통신을 위해 필요"
-  }
-}
+{"api":"1.0.0","editorType":["figma","dev"],"id":"figma-i18n-sync-plugin","name":"Figma i18n Sync","main":"build/main.js","ui":"build/ui.js","networkAccess":{"allowedDomains":["*"],"reasoning":"Sync server 통신을 위해 필요"}}

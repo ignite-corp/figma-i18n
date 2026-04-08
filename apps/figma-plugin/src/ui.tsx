@@ -1,7 +1,7 @@
+import { on, emit } from "@create-figma-plugin/utilities";
 import type {
   ExtractedNode,
   ScanResultNode,
-  ScanResponse,
   NodeStatus,
   SyncItem,
   I18nPluginData,
@@ -33,30 +33,23 @@ const userActions: Map<
   { action: SyncItem["action"]; keyName?: string }
 > = new Map();
 
-// ─── Plugin message handling ───
-window.onmessage = async (event: MessageEvent) => {
-  const msg = event.data.pluginMessage;
-  if (!msg) return;
+// ─── Plugin message handling (via @create-figma-plugin/utilities) ───
+on("SCAN_RESULT", async (nodes: ExtractedNode[]) => {
+  extractedNodes = nodes;
+  await handleScanResult();
+});
 
-  switch (msg.type) {
-    case "scan-result":
-      extractedNodes = msg.payload as ExtractedNode[];
-      await handleScanResult();
-      break;
-    case "file-key":
-      figmaFileKey = msg.payload as string;
-      break;
-    case "selection-changed":
-      updateSelectionInfo(msg.payload);
-      break;
-    case "bulk-save-done":
-      showNotify("pluginData 저장 완료!");
-      break;
-  }
-};
+on("FILE_KEY", (fileKey: string) => {
+  figmaFileKey = fileKey;
+});
 
-// 파일 키 요청
-postToPlugin("get-file-key");
+on("SELECTION_CHANGED", (_payload: { hasSelection: boolean; count: number }) => {
+  // 선택 변경 시 UI 힌트 (추후 확장 가능)
+});
+
+on("BULK_SAVE_DONE", () => {
+  showNotify("pluginData 저장 완료!");
+});
 
 // ─── Scan logic ───
 async function handleScanResult() {
@@ -68,7 +61,7 @@ async function handleScanResult() {
   setLoading(true);
 
   try {
-    const response: ScanResponse = await scanNodes({
+    const response = await scanNodes({
       figmaFileId: figmaFileKey || "unknown",
       nodes: extractedNodes,
     });
@@ -153,7 +146,7 @@ async function handleSync() {
 
     // Figma pluginData 일괄 저장
     if (pluginDataUpdates.length > 0) {
-      postToPlugin("save-mappings-bulk", pluginDataUpdates);
+      emit("SAVE_MAPPINGS_BULK", pluginDataUpdates);
     }
 
     showNotify(
@@ -414,7 +407,7 @@ function bindEvents() {
 
   // Scan button
   document.getElementById("btn-scan")?.addEventListener("click", () => {
-    postToPlugin("scan");
+    emit("SCAN");
   });
 
   // Sync button
@@ -465,7 +458,7 @@ function bindEvents() {
   });
 }
 
-function updateSelectionInfo(payload: {
+function updateSelectionInfo(_payload: {
   hasSelection: boolean;
   count: number;
 }) {
@@ -473,12 +466,8 @@ function updateSelectionInfo(payload: {
 }
 
 // ─── Helpers ───
-function postToPlugin(type: string, payload?: unknown) {
-  parent.postMessage({ pluginMessage: { type, payload } }, "*");
-}
-
 function showNotify(message: string) {
-  postToPlugin("notify", { message });
+  emit("NOTIFY", { message });
 }
 
 function escapeHtml(str: string): string {

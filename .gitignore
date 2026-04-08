@@ -17,6 +17,8 @@ supabase/.temp/
 
 # build output
 apps/figma-plugin/dist/
+apps/figma-plugin/build/
+apps/figma-plugin/manifest.json
 
 # OS
 .DS_Store
