@@ -15,7 +15,7 @@ import {
   setServerUrl,
   getServerUrl,
 } from "./api-client";
-import "./ui.css";
+import "!./ui.css";
 
 // ─── State ───
 let figmaFileKey = "";
