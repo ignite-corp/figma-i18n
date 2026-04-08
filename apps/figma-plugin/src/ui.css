@@ -1,0 +1,419 @@
+/* ─── Reset ─── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  color: #1E1E1E;
+  background: #FFFFFF;
+  line-height: 1.4;
+}
+
+/* ─── Layout ─── */
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ─── Settings Panel ─── */
+.settings-panel {
+  padding: 8px 12px;
+  border-bottom: 1px solid #E5E5E5;
+  background: #FAFAFA;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.field label {
+  font-size: 11px;
+  color: #6B6B6B;
+  white-space: nowrap;
+  min-width: 60px;
+}
+
+.field input {
+  flex: 1;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid #E5E5E5;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #1E1E1E;
+  background: #FFFFFF;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.1s;
+}
+
+.field input:focus {
+  border-color: #0D99FF;
+}
+
+/* ─── Toolbar ─── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid #E5E5E5;
+}
+
+.toolbar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1E1E1E;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+/* ─── Cache Status ─── */
+.cache-status {
+  padding: 3px 12px;
+  font-size: 10px;
+  color: #8C8C8C;
+  background: #FAFAFA;
+  border-bottom: 1px solid #E5E5E5;
+}
+
+.cache-status strong {
+  color: #1E1E1E;
+}
+
+/* ─── Summary Bar ─── */
+.summary-bar {
+  display: flex;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #E5E5E5;
+  overflow-x: auto;
+}
+
+.summary-item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: #6B6B6B;
+  white-space: nowrap;
+}
+
+.summary-count {
+  font-weight: 700;
+  color: #1E1E1E;
+}
+
+/* ─── Filter Bar ─── */
+.filter-bar {
+  display: flex;
+  gap: 4px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #E5E5E5;
+  overflow-x: auto;
+}
+
+.filter-chip {
+  padding: 3px 8px;
+  border-radius: 10px;
+  border: 1px solid #E5E5E5;
+  background: #FFFFFF;
+  font-size: 10px;
+  font-weight: 500;
+  color: #6B6B6B;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.1s;
+  font-family: inherit;
+}
+
+.filter-chip:hover {
+  background: #F5F5F5;
+}
+
+.filter-chip.active {
+  background: #0D99FF;
+  border-color: #0D99FF;
+  color: #FFFFFF;
+}
+
+/* ─── Node List ─── */
+.node-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.node-item {
+  padding: 10px 12px;
+  border-bottom: 1px solid #F0F0F0;
+  transition: background 0.1s;
+}
+
+.node-item:hover {
+  background: #F9F9F9;
+}
+
+.node-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.node-text {
+  font-size: 12px;
+  color: #1E1E1E;
+  font-style: italic;
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-path {
+  font-size: 10px;
+  color: #8C8C8C;
+  margin-bottom: 6px;
+}
+
+/* ─── Badges ─── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.badge-matched  { background: #E8F9F2; color: #14A867; }
+.badge-candidate { background: #FEF5E4; color: #C97B00; }
+.badge-new      { background: #E5F3FF; color: #0D99FF; }
+.badge-changed  { background: #FEE8E4; color: #E03E1A; }
+.badge-ignored  { background: #F0F0F0; color: #8C8C8C; }
+
+/* ─── Action Indicator ─── */
+.action-indicator {
+  font-size: 10px;
+  color: #0D99FF;
+  font-weight: 500;
+}
+
+/* ─── Mapping Info ─── */
+.mapping-info {
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: #F5F5F5;
+  margin-bottom: 6px;
+  font-size: 10px;
+  color: #6B6B6B;
+}
+
+.mapping-info code {
+  font-family: 'Roboto Mono', 'SF Mono', 'Consolas', monospace;
+  font-size: 10px;
+  color: #1E1E1E;
+  background: #E8E8E8;
+  padding: 0 3px;
+  border-radius: 2px;
+}
+
+.changed-diff {
+  margin-top: 3px;
+  color: #E03E1A;
+  font-size: 10px;
+}
+
+/* ─── Candidate List ─── */
+.candidate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 6px;
+}
+
+.candidate-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: #F5F5F5;
+  gap: 6px;
+}
+
+.candidate-key {
+  font-size: 10px;
+  font-family: 'Roboto Mono', 'SF Mono', 'Consolas', monospace;
+  color: #1E1E1E;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidate-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.candidate-match-type {
+  font-size: 9px;
+  color: #8C8C8C;
+  text-transform: uppercase;
+}
+
+.candidate-score {
+  font-size: 10px;
+  font-weight: 700;
+  color: #14A867;
+}
+
+/* ─── Key Input ─── */
+.key-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.key-input {
+  width: 100%;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid #E5E5E5;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: 'Roboto Mono', 'SF Mono', 'Consolas', monospace;
+  color: #1E1E1E;
+  background: #FFFFFF;
+  outline: none;
+}
+
+.key-input:focus {
+  border-color: #0D99FF;
+}
+
+/* ─── Node Actions ─── */
+.node-actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+/* ─── Buttons ─── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: none;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.1s, background 0.1s;
+  font-family: inherit;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: #0D99FF;
+  color: #FFFFFF;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #0082DB;
+}
+
+.btn-secondary {
+  background: #F0F0F0;
+  color: #1E1E1E;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #E5E5E5;
+}
+
+.btn-danger {
+  background: #FEE8E4;
+  color: #E03E1A;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #FDCDC5;
+}
+
+.btn-sm {
+  height: 22px;
+  padding: 0 7px;
+  font-size: 10px;
+  border-radius: 4px;
+}
+
+/* ─── State Views (empty / error / loading) ─── */
+.state-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 20px;
+  flex: 1;
+  color: #8C8C8C;
+  text-align: center;
+}
+
+.state-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.state-message {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.state-view.error .state-message {
+  color: #E03E1A;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #E5E5E5;
+  border-top-color: #0D99FF;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
