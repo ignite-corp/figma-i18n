@@ -5,12 +5,13 @@ import type {
   NodeStatus,
   SyncItem,
   I18nPluginData,
+  CacheStatusResponse,
 } from "shared-types";
 import {
   scanNodes,
   syncItems,
   getCacheStatus,
-  searchKeys,
+  refreshCache,
   setServerUrl,
   getServerUrl,
 } from "./api-client";
@@ -23,6 +24,8 @@ let activeFilter: NodeStatus | "all" = "all";
 let serverUrlInput = getServerUrl();
 let isLoading = false;
 let userEmail = "";
+let cacheStatus: CacheStatusResponse | null = null;
+let isCacheRefreshing = false;
 
 // 사용자가 선택한 action 저장
 const userActions: Map<
@@ -77,6 +80,28 @@ async function handleScanResult() {
     renderError(`서버 연결 실패: ${err instanceof Error ? err.message : err}`);
   } finally {
     setLoading(false);
+  }
+}
+
+// ─── Cache refresh logic ───
+async function handleRefreshCache() {
+  if (isCacheRefreshing) return;
+  isCacheRefreshing = true;
+  render();
+
+  try {
+    const result = await refreshCache();
+    cacheStatus = {
+      status: "idle",
+      totalKeys: result.totalKeys,
+      lastSyncAt: result.lastSyncAt,
+    };
+    showNotify(`캐시 갱신 완료: ${result.totalKeys.toLocaleString()}개 키 (${result.duration}ms)`);
+  } catch (err) {
+    showNotify(`캐시 갱신 실패: ${err instanceof Error ? err.message : err}`);
+  } finally {
+    isCacheRefreshing = false;
+    render();
   }
 }
 
@@ -183,12 +208,17 @@ function render() {
         <input type="text" id="user-email" value="${userEmail}" placeholder="your@email.com" />
       </div>
 
+      ${renderCacheStatus()}
+
       <div class="header">
         <h2>i18n Scan Results</h2>
         <div style="display:flex;gap:4px;">
           <button class="btn btn-primary" id="btn-scan">🔍 스캔</button>
           <button class="btn btn-primary" id="btn-sync" ${pendingCount === 0 ? "disabled" : ""}>
             🚀 동기화 (${pendingCount})
+          </button>
+          <button class="btn btn-secondary" id="btn-refresh-cache" ${isCacheRefreshing ? "disabled" : ""}>
+            ${isCacheRefreshing ? "⏳" : "🔄"} 캐시 갱신
           </button>
         </div>
       </div>
@@ -213,6 +243,18 @@ function render() {
   `;
 
   bindEvents();
+}
+
+function renderCacheStatus(): string {
+  if (!cacheStatus) return "";
+  const lastSync = cacheStatus.lastSyncAt
+    ? new Date(cacheStatus.lastSyncAt).toLocaleString("ko-KR", { hour12: false })
+    : "없음";
+  return `
+    <div style="font-size:10px;color:#666;padding:4px 0;border-bottom:1px solid #eee;margin-bottom:4px;">
+      캐시: <strong>${cacheStatus.totalKeys.toLocaleString()}</strong>개 키 · 마지막 갱신: ${lastSync}
+    </div>
+  `;
 }
 
 function renderFilterChips(): string {
@@ -309,9 +351,15 @@ function renderEmpty(message: string) {
         <label>Server URL</label>
         <input type="text" id="server-url" value="${serverUrlInput}" />
       </div>
+      ${renderCacheStatus()}
       <div class="header">
         <h2>i18n Sync</h2>
-        <button class="btn btn-primary" id="btn-scan">🔍 스캔</button>
+        <div style="display:flex;gap:4px;">
+          <button class="btn btn-primary" id="btn-scan">🔍 스캔</button>
+          <button class="btn btn-secondary" id="btn-refresh-cache" ${isCacheRefreshing ? "disabled" : ""}>
+            ${isCacheRefreshing ? "⏳" : "🔄"} 캐시 갱신
+          </button>
+        </div>
       </div>
       <div class="empty">${message}</div>
     </div>
@@ -326,9 +374,15 @@ function renderError(message: string) {
         <label>Server URL</label>
         <input type="text" id="server-url" value="${serverUrlInput}" />
       </div>
+      ${renderCacheStatus()}
       <div class="header">
         <h2>i18n Sync</h2>
-        <button class="btn btn-primary" id="btn-scan">🔍 스캔</button>
+        <div style="display:flex;gap:4px;">
+          <button class="btn btn-primary" id="btn-scan">🔍 스캔</button>
+          <button class="btn btn-secondary" id="btn-refresh-cache" ${isCacheRefreshing ? "disabled" : ""}>
+            ${isCacheRefreshing ? "⏳" : "🔄"} 캐시 갱신
+          </button>
+        </div>
       </div>
       <div class="empty" style="color:red;">${message}</div>
     </div>
@@ -366,6 +420,11 @@ function bindEvents() {
   // Sync button
   document.getElementById("btn-sync")?.addEventListener("click", () => {
     handleSync();
+  });
+
+  // Cache refresh button
+  document.getElementById("btn-refresh-cache")?.addEventListener("click", () => {
+    handleRefreshCache();
   });
 
   // Filter chips
@@ -432,3 +491,17 @@ function escapeHtml(str: string): string {
 
 // ─── Initial render ───
 renderEmpty("Frame을 선택하고 [스캔] 버튼을 눌러주세요");
+
+// 초기 캐시 상태 조회 (백그라운드)
+getCacheStatus()
+  .then((status) => {
+    cacheStatus = status;
+    if (scanResults.length > 0) {
+      render();
+    } else {
+      renderEmpty("Frame을 선택하고 [스캔] 버튼을 눌러주세요");
+    }
+  })
+  .catch(() => {
+    // 서버 연결 전이거나 오프라인 상태일 때 무시
+  });
