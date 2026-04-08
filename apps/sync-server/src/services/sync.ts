@@ -5,6 +5,7 @@ import { getLokaliseClient } from "./cache";
 import { logger } from "../lib/logger";
 
 const config = loadConfig();
+const targetLanguages = config.LOKALISE_TARGET_LANGUAGES.split(",").map((l) => l.trim());
 
 /** 승인된 항목들을 Lokalise에 반영하고 DB에 기록 */
 export async function processSyncItems(
@@ -53,12 +54,10 @@ async function processSingleItem(
           {
             key_name: item.keyName,
             platforms: ["web"],
-            translations: [
-              {
-                language_iso: config.LOKALISE_BASE_LANGUAGE,
-                translation: item.text,
-              },
-            ],
+            translations: targetLanguages.map((lang) => ({
+              language_iso: lang,
+              translation: item.text,
+            })),
             tags: ["figma-sync"],
           },
         ],
@@ -160,13 +159,11 @@ async function processSingleItem(
 
       if (cached) {
         await lokalise.updateKeyTranslation(cached.lokaliseKeyId, {
-          translations: [
-            {
-              language_iso: config.LOKALISE_BASE_LANGUAGE,
-              translation: item.text,
-              is_fuzzy: true,
-            },
-          ],
+          translations: targetLanguages.map((lang) => ({
+            language_iso: lang,
+            translation: item.text,
+            is_fuzzy: true,
+          })),
         });
 
         // 캐시 업데이트

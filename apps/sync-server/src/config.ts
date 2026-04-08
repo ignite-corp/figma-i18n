@@ -6,6 +6,7 @@ const envSchema = z.object({
   LOKALISE_API_TOKEN: z.string().min(1),
   LOKALISE_PROJECT_ID: z.string().min(1), // 기본 프로젝트
   LOKALISE_BASE_LANGUAGE: z.string().default("ko"),
+  LOKALISE_TARGET_LANGUAGES: z.string().default("en,en_CA,fr_CA"),
   LOKALISE_PROJECT_DEALER_FO: z.string().optional(),
   LOKALISE_PROJECT_DEALER_BO: z.string().optional(),
   PORT: z.coerce.number().default(3001),
