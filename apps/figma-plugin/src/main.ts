@@ -34,9 +34,6 @@ export default function () {
     }
   });
 
-  // 파일 키 전달
-  emit("FILE_KEY", figma.fileKey);
-
   on("NOTIFY", (payload: { message: string }) => {
     figma.notify(payload.message);
   });
@@ -55,4 +52,7 @@ export default function () {
   });
 
   showUI({ width: 420, height: 600 });
+
+  // 파일 키 전달 (showUI 이후에 호출해야 UI가 메시지를 수신할 수 있음)
+  emit("FILE_KEY", figma.fileKey);
 }
