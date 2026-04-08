@@ -5,7 +5,6 @@ import { getLokaliseClient } from "./cache";
 import { logger } from "../lib/logger";
 
 const config = loadConfig();
-const targetLanguages = config.LOKALISE_TARGET_LANGUAGES.split(",").map((l) => l.trim());
 
 /** 승인된 항목들을 Lokalise에 반영하고 DB에 기록 */
 export async function processSyncItems(
@@ -18,9 +17,22 @@ export async function processSyncItems(
   const lokalise = getLokaliseClient(projectKey);
   const results: SyncResultItem[] = [];
 
+  // 프로젝트에 정의된 언어를 동적으로 조회
+  const projectLanguages = await lokalise.getLanguages();
+  const targetLanguages = projectLanguages
+    .map((lang) => lang.lang_iso)
+    .filter((iso) => iso !== lokalise.baseLanguage);
+
+  logger.debug(
+    { projectId, baseLanguage: lokalise.baseLanguage, targetLanguages },
+    "Resolved project languages",
+  );
+
   for (const item of items) {
     try {
-      const result = await processSingleItem(figmaFileId, triggeredBy, item, projectId, lokalise);
+      const result = await processSingleItem(
+        figmaFileId, triggeredBy, item, projectId, lokalise, targetLanguages,
+      );
       results.push(result);
     } catch (err) {
       logger.error({ err, item }, "Sync item failed");
@@ -43,10 +55,14 @@ async function processSingleItem(
   item: SyncItem,
   projectId: string,
   lokalise: ReturnType<typeof getLokaliseClient>,
+  targetLanguages: string[],
 ): Promise<SyncResultItem> {
   switch (item.action) {
     case "create_new": {
       if (!item.keyName) throw new Error("keyName is required for create_new");
+
+      // base language + target languages 모두에 번역 설정
+      const allLanguages = [lokalise.baseLanguage, ...targetLanguages];
 
       // Lokalise에 key 생성
       const response = await lokalise.createKeys({
@@ -54,7 +70,7 @@ async function processSingleItem(
           {
             key_name: item.keyName,
             platforms: ["web"],
-            translations: targetLanguages.map((lang) => ({
+            translations: allLanguages.map((lang) => ({
               language_iso: lang,
               translation: item.text,
             })),

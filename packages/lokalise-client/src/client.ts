@@ -4,6 +4,8 @@ import type {
   LokaliseKeysResponse,
   LokaliseCreateKeyPayload,
   LokaliseUpdateKeyPayload,
+  LokaliseLanguage,
+  LokaliseLanguagesResponse,
 } from "./types";
 
 export interface LokaliseClientConfig {
@@ -103,6 +105,14 @@ export class LokaliseClient {
         }),
       },
     );
+  }
+
+  /** 프로젝트에 정의된 언어 목록 조회 */
+  async getLanguages(): Promise<LokaliseLanguage[]> {
+    const response = await this.request<LokaliseLanguagesResponse>(
+      `/projects/${this.projectId}/languages`,
+    );
+    return response.languages;
   }
 
   /** key 이름으로 검색 */

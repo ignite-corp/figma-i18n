@@ -53,3 +53,15 @@ export interface LokaliseProjectResponse {
   name: string;
   base_language_iso: string;
 }
+
+export interface LokaliseLanguage {
+  lang_id: number;
+  lang_iso: string;
+  lang_name: string;
+  is_rtl: boolean;
+}
+
+export interface LokaliseLanguagesResponse {
+  project_id: string;
+  languages: LokaliseLanguage[];
+}
