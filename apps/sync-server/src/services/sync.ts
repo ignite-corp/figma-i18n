@@ -94,9 +94,12 @@ async function processSingleItem(
     case "create_new": {
       if (!item.keyName) throw new Error("keyName is required for create_new");
 
+      // value가 명시적으로 지정된 경우 해당 값 사용, 없으면 Figma 텍스트 사용
+      const sourceText = item.value ?? item.text;
+
       // base language + target languages 모두에 번역 설정 (FR 계열은 자동 번역)
       const translations = await buildTranslations(
-        lokalise.baseLanguage, targetLanguages, item.text, hChatApiKey,
+        lokalise.baseLanguage, targetLanguages, sourceText, hChatApiKey,
       );
 
       // Lokalise에 key 생성
@@ -118,7 +121,7 @@ async function processSingleItem(
         where: { figmaFileId_nodeId: { figmaFileId, nodeId: item.nodeId } },
         update: {
           keyName: item.keyName,
-          sourceText: item.text,
+          sourceText,
           status: "ACTIVE",
           projectId,
         },
@@ -127,7 +130,7 @@ async function processSingleItem(
           nodeId: item.nodeId,
           projectId,
           keyName: item.keyName,
-          sourceText: item.text,
+          sourceText,
           status: "ACTIVE",
         },
       });
@@ -138,14 +141,14 @@ async function processSingleItem(
           where: { projectId_lokaliseKeyId: { projectId, lokaliseKeyId: createdKey.key_id } },
           update: {
             keyName: item.keyName,
-            baseValue: item.text,
+            baseValue: sourceText,
             fetchedAt: new Date(),
           },
           create: {
             lokaliseKeyId: createdKey.key_id,
             projectId,
             keyName: item.keyName,
-            baseValue: item.text,
+            baseValue: sourceText,
             platforms: ["web"],
             tags: ["figma-sync"],
             fetchedAt: new Date(),
@@ -154,7 +157,7 @@ async function processSingleItem(
       }
 
       // History 기록
-      await recordHistory(figmaFileId, item.nodeId, item.keyName, "KEY_CREATED", null, item.text, triggeredBy);
+      await recordHistory(figmaFileId, item.nodeId, item.keyName, "KEY_CREATED", null, sourceText, triggeredBy);
 
       return {
         nodeId: item.nodeId,
@@ -168,12 +171,14 @@ async function processSingleItem(
     case "link_existing": {
       if (!item.keyName) throw new Error("keyName is required for link_existing");
 
+      const sourceText = item.value ?? item.text;
+
       // DB: 매핑 저장
       await prisma.figmaKeyMapping.upsert({
         where: { figmaFileId_nodeId: { figmaFileId, nodeId: item.nodeId } },
         update: {
           keyName: item.keyName,
-          sourceText: item.text,
+          sourceText,
           status: "ACTIVE",
           projectId,
         },
@@ -182,12 +187,12 @@ async function processSingleItem(
           nodeId: item.nodeId,
           projectId,
           keyName: item.keyName,
-          sourceText: item.text,
+          sourceText,
           status: "ACTIVE",
         },
       });
 
-      await recordHistory(figmaFileId, item.nodeId, item.keyName, "KEY_LINKED", null, item.text, triggeredBy);
+      await recordHistory(figmaFileId, item.nodeId, item.keyName, "KEY_LINKED", null, sourceText, triggeredBy);
 
       return {
         nodeId: item.nodeId,
@@ -200,6 +205,8 @@ async function processSingleItem(
     case "update_source": {
       if (!item.keyName) throw new Error("keyName is required for update_source");
 
+      const sourceText = item.value ?? item.text;
+
       // Lokalise key ID 찾기 (캐시에서)
       const cached = await prisma.lokaliseKeyCache.findFirst({
         where: { keyName: item.keyName, projectId },
@@ -208,7 +215,7 @@ async function processSingleItem(
       if (cached) {
         // FR 계열은 자동 번역, EN 계열은 원문 유지
         const translations = await buildTranslations(
-          lokalise.baseLanguage, targetLanguages, item.text, hChatApiKey,
+          lokalise.baseLanguage, targetLanguages, sourceText, hChatApiKey,
         );
         const targetOnlyTranslations = translations
           .filter((t) => t.language_iso !== lokalise.baseLanguage)
@@ -221,7 +228,7 @@ async function processSingleItem(
         // 캐시 업데이트
         await prisma.lokaliseKeyCache.update({
           where: { projectId_lokaliseKeyId: { projectId, lokaliseKeyId: cached.lokaliseKeyId } },
-          data: { baseValue: item.text, fetchedAt: new Date() },
+          data: { baseValue: sourceText, fetchedAt: new Date() },
         });
       }
 
@@ -229,7 +236,7 @@ async function processSingleItem(
       await prisma.figmaKeyMapping.upsert({
         where: { figmaFileId_nodeId: { figmaFileId, nodeId: item.nodeId } },
         update: {
-          sourceText: item.text,
+          sourceText,
           status: "ACTIVE",
           projectId,
         },
@@ -238,14 +245,14 @@ async function processSingleItem(
           nodeId: item.nodeId,
           projectId,
           keyName: item.keyName,
-          sourceText: item.text,
+          sourceText,
           status: "ACTIVE",
         },
       });
 
       await recordHistory(
         figmaFileId, item.nodeId, item.keyName,
-        "SOURCE_UPDATED", item.previousText ?? null, item.text, triggeredBy,
+        "SOURCE_UPDATED", item.previousText ?? null, sourceText, triggeredBy,
       );
 
       return {
@@ -269,6 +276,41 @@ async function processSingleItem(
       };
     }
 
+    case "delete_key": {
+      if (!item.keyName) throw new Error("keyName is required for delete_key");
+
+      // Lokalise에서 key ID를 찾아서 삭제
+      const cached = await prisma.lokaliseKeyCache.findFirst({
+        where: { keyName: item.keyName, projectId },
+      });
+
+      if (cached) {
+        await lokalise.deleteKeys([cached.lokaliseKeyId]);
+
+        // 캐시에서도 삭제
+        await prisma.lokaliseKeyCache.delete({
+          where: { projectId_lokaliseKeyId: { projectId, lokaliseKeyId: cached.lokaliseKeyId } },
+        });
+      }
+
+      // DB: 매핑 삭제
+      await prisma.figmaKeyMapping.deleteMany({
+        where: { figmaFileId, nodeId: item.nodeId },
+      });
+
+      await recordHistory(
+        figmaFileId, item.nodeId, item.keyName,
+        "KEY_DELETED", item.text, null, triggeredBy,
+      );
+
+      return {
+        nodeId: item.nodeId,
+        success: true,
+        action: item.action,
+        keyName: item.keyName,
+      };
+    }
+
     default:
       throw new Error(`Unknown action: ${item.action}`);
   }
@@ -278,7 +320,7 @@ async function recordHistory(
   figmaFileId: string,
   nodeId: string,
   keyName: string,
-  action: "KEY_CREATED" | "KEY_LINKED" | "SOURCE_UPDATED" | "KEY_UNLINKED" | "IGNORED",
+  action: "KEY_CREATED" | "KEY_LINKED" | "SOURCE_UPDATED" | "KEY_UNLINKED" | "IGNORED" | "KEY_DELETED",
   prevValue: string | null,
   newValue: string | null,
   triggeredBy: string,

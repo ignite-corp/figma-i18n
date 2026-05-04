@@ -10,10 +10,11 @@ const syncBodySchema = z.object({
   items: z.array(
     z.object({
       nodeId: z.string(),
-      action: z.enum(["link_existing", "create_new", "update_source", "ignore"]),
+      action: z.enum(["link_existing", "create_new", "update_source", "ignore", "delete_key"]),
       keyName: z.string().optional(),
       text: z.string(),
       previousText: z.string().optional(),
+      value: z.string().optional(),
     }),
   ),
 });

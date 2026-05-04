@@ -78,6 +78,7 @@ enum SyncAction {
   SOURCE_UPDATED
   KEY_UNLINKED
   IGNORED
+  KEY_DELETED
 }
 
 // ─── 공통 문구 사전 (DB 관리) ───
