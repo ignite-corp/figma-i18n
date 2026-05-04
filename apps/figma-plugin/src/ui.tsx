@@ -34,8 +34,14 @@ const userActions: Map<
   { action: SyncItem["action"]; keyName?: string }
 > = new Map();
 
+// 사용자가 직접 수정한 value 저장
+const userValues: Map<string, string> = new Map();
+
 // 체크박스 선택 상태
 const checkedNodes: Set<string> = new Set();
+
+// 검색 쿼리
+let searchQuery = "";
 
 // ─── Plugin message handling ───
 on("SCAN_RESULT", async (nodes: ExtractedNode[]) => {
@@ -72,6 +78,7 @@ async function handleScanResult() {
 
     scanResults = response.results;
     userActions.clear();
+    userValues.clear();
     checkedNodes.clear();
     render();
   } catch (err) {
@@ -105,7 +112,7 @@ async function handleRefreshCache() {
 
 // ─── Checkbox helpers ───
 function isCheckable(status: NodeStatus): boolean {
-  return status !== "matched" && status !== "ignored";
+  return status !== "ignored";
 }
 
 function resolveAction(result: ScanResultNode): { action: SyncItem["action"]; keyName?: string } | null {
@@ -157,21 +164,23 @@ async function handleSync() {
     const resolved = resolveAction(result);
     if (!resolved) continue;
 
+    const editedValue = userValues.get(result.nodeId);
     items.push({
       nodeId: result.nodeId,
       action: resolved.action,
       keyName: resolved.keyName,
       text: result.text,
       previousText: result.existingMapping?.previousText,
+      value: editedValue !== undefined ? editedValue : undefined,
     });
 
-    if (resolved.action !== "ignore" && resolved.keyName) {
+    if (resolved.action !== "ignore" && resolved.action !== "delete_key" && resolved.keyName) {
       pluginDataUpdates.push({
         nodeId: result.nodeId,
         data: {
           key: resolved.keyName,
           status: "matched",
-          sourceText: result.text,
+          sourceText: editedValue !== undefined ? editedValue : result.text,
           linkedAt: new Date().toISOString(),
           syncedAt: new Date().toISOString(),
         },
@@ -205,7 +214,24 @@ async function handleSync() {
       if (item.success) {
         const idx = scanResults.findIndex((r) => r.nodeId === item.nodeId);
         if (idx !== -1) {
-          scanResults[idx] = { ...scanResults[idx], status: "matched" };
+          if (item.action === "delete_key") {
+            // 삭제 성공 시 매핑 해제 → new 상태로 전환
+            scanResults[idx] = {
+              ...scanResults[idx],
+              status: "new",
+              existingMapping: null,
+              suggestedKey: null,
+            };
+            userActions.delete(item.nodeId);
+            checkedNodes.delete(item.nodeId);
+            // pluginData 클리어
+            emit("SAVE_MAPPING", {
+              nodeId: item.nodeId,
+              data: { key: "", status: "matched", sourceText: "", linkedAt: "" },
+            });
+          } else {
+            scanResults[idx] = { ...scanResults[idx], status: "matched" };
+          }
         }
       }
     }
@@ -225,6 +251,18 @@ function render() {
     activeFilter === "all"
       ? scanResults
       : scanResults.filter((r) => r.status === activeFilter);
+
+  // 검색 필터링
+  const query = searchQuery.toLowerCase();
+  const displayed = query
+    ? filtered.filter((r) => {
+        const keyMatch = r.existingMapping?.keyName?.toLowerCase().includes(query)
+          || r.suggestedKey?.toLowerCase().includes(query)
+          || userActions.get(r.nodeId)?.keyName?.toLowerCase().includes(query);
+        const valueMatch = r.text.toLowerCase().includes(query);
+        return keyMatch || valueMatch;
+      })
+    : filtered;
 
   const summary = {
     total: scanResults.length,
@@ -268,6 +306,10 @@ function render() {
         ${renderFilterChips()}
       </div>
 
+      <div class="search-bar">
+        <input class="search-input" type="text" id="search-input" placeholder="\ud83d\udd0d key \ub610\ub294 \ud14d\uc2a4\ud2b8 \uac80\uc0c9..." value="${escapeHtml(searchQuery)}" />
+      </div>
+
       <div class="group-select-bar">
         <button class="btn btn-sm btn-secondary" data-group-select="all">전체 선택</button>
         <button class="btn btn-sm btn-secondary" data-group-select="candidate">후보 전체</button>
@@ -277,7 +319,7 @@ function render() {
       </div>
 
       <div class="node-list">
-        ${filtered.map((r) => renderNodeItem(r)).join("")}
+        ${displayed.map((r) => renderNodeItem(r)).join("")}
       </div>
     </div>
   `;
@@ -358,11 +400,26 @@ function renderNodeItem(result: ScanResultNode): string {
 
 function renderExistingMapping(result: ScanResultNode): string {
   if (!result.existingMapping) return "";
+  const editedValue = userValues.get(result.nodeId);
+  const currentValue = editedValue !== undefined ? editedValue : result.text;
+  const isDeleteAction = userActions.get(result.nodeId)?.action === "delete_key";
+
   return `
     <div class="mapping-info">
-      Key: <code>${escapeHtml(result.existingMapping.keyName)}</code>
+      <div class="mapping-key-row">
+        Key: <code>${escapeHtml(result.existingMapping.keyName)}</code>
+        <button class="btn btn-sm btn-danger" data-action="delete" data-node-id="${result.nodeId}" data-key="${escapeHtml(result.existingMapping.keyName)}">
+          ${isDeleteAction ? "삭제 취소" : "삭제"}
+        </button>
+      </div>
       ${result.status === "changed"
         ? `<div class="changed-diff">이전: "${escapeHtml(result.existingMapping.previousText ?? "")}" → 현재: "${escapeHtml(result.existingMapping.currentText ?? "")}"</div>`
+        : ""}
+      ${(result.status === "changed" || result.status === "matched") && !isDeleteAction
+        ? `<div class="value-input-group">
+            <label class="value-label">Value</label>
+            <input class="value-input" type="text" value="${escapeHtml(currentValue)}" data-value-input="${result.nodeId}" placeholder="번역 텍스트" />
+          </div>`
         : ""}
     </div>
   `;
@@ -392,10 +449,16 @@ function renderCandidates(result: ScanResultNode): string {
 function renderNewKeyInput(result: ScanResultNode): string {
   const suggested = result.suggestedKey || "";
   const currentKey = userActions.get(result.nodeId)?.keyName || suggested;
+  const editedValue = userValues.get(result.nodeId);
+  const currentValue = editedValue !== undefined ? editedValue : result.text;
 
   return `
     <div class="key-input-group">
       <input class="key-input" type="text" placeholder="domain.section.element.modifier" value="${escapeHtml(currentKey)}" data-key-input="${result.nodeId}" />
+    </div>
+    <div class="value-input-group">
+      <label class="value-label">Value</label>
+      <input class="value-input" type="text" value="${escapeHtml(currentValue)}" data-value-input="${result.nodeId}" placeholder="번역 텍스트" />
     </div>
   `;
 }
@@ -527,6 +590,45 @@ function bindEvents() {
       render();
     });
   });
+
+  // 삭제 버튼 (matched/changed 노드의 키 삭제)
+  document.querySelectorAll("[data-action='delete']").forEach((el) => {
+    el.addEventListener("click", () => {
+      const nodeId = (el as HTMLElement).dataset.nodeId!;
+      const key = (el as HTMLElement).dataset.key!;
+      const existing = userActions.get(nodeId);
+      if (existing?.action === "delete_key") {
+        // 이미 삭제 예정이면 취소
+        userActions.delete(nodeId);
+        checkedNodes.delete(nodeId);
+      } else {
+        userActions.set(nodeId, { action: "delete_key", keyName: key });
+        checkedNodes.add(nodeId);
+      }
+      render();
+    });
+  });
+
+  // 검색 인풋
+  document.getElementById("search-input")?.addEventListener("input", (e) => {
+    searchQuery = (e.target as HTMLInputElement).value;
+    render();
+    // 렌더 후 포커스와 커서 복원
+    const input = document.getElementById("search-input") as HTMLInputElement | null;
+    if (input) {
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
+  });
+
+  // Value 수정 인풋
+  document.querySelectorAll("[data-value-input]").forEach((el) => {
+    el.addEventListener("input", (e) => {
+      const nodeId = (el as HTMLElement).dataset.valueInput!;
+      const value = (e.target as HTMLInputElement).value;
+      userValues.set(nodeId, value);
+    });
+  });
 }
 
 // ─── Helpers ───
@@ -559,6 +661,7 @@ function actionLabel(action: SyncItem["action"]): string {
     create_new: "생성 예정",
     update_source: "업데이트 예정",
     ignore: "무시 예정",
+    delete_key: "삭제 예정",
   };
   return labels[action] ?? action;
 }

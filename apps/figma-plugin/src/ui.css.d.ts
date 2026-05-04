@@ -31,6 +31,7 @@ declare const styles: {
   readonly "key-input-group": string;
   readonly "loading-spinner": string;
   readonly "mapping-info": string;
+  readonly "mapping-key-row": string;
   readonly "node-actions": string;
   readonly "node-checkbox": string;
   readonly "node-item": string;
@@ -39,6 +40,8 @@ declare const styles: {
   readonly "node-list": string;
   readonly "node-path": string;
   readonly "node-text": string;
+  readonly "search-bar": string;
+  readonly "search-input": string;
   readonly "settings-panel": string;
   readonly "spin": string;
   readonly "state-icon": string;
@@ -50,6 +53,9 @@ declare const styles: {
   readonly "toolbar": string;
   readonly "toolbar-actions": string;
   readonly "toolbar-title": string;
+  readonly "value-input": string;
+  readonly "value-input-group": string;
+  readonly "value-label": string;
 };
 export = styles;
 
