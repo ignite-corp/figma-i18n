@@ -122,4 +122,15 @@ export class LokaliseClient {
     );
     return response.keys;
   }
+
+  /** key 삭제 (복수) */
+  async deleteKeys(keyIds: number[]): Promise<void> {
+    await this.request(
+      `/projects/${this.projectId}/keys`,
+      {
+        method: "DELETE",
+        body: JSON.stringify({ keys: keyIds }),
+      },
+    );
+  }
 }
