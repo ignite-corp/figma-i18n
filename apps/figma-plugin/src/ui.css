@@ -152,6 +152,15 @@ body {
   color: #FFFFFF;
 }
 
+/* ─── Group Select Bar ─── */
+.group-select-bar {
+  display: flex;
+  gap: 4px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #E5E5E5;
+  overflow-x: auto;
+}
+
 /* ─── Node List ─── */
 .node-list {
   flex: 1;
@@ -168,11 +177,40 @@ body {
   background: #F9F9F9;
 }
 
+.node-item--checked {
+  background: #F0F7FF;
+}
+
+.node-item--checked:hover {
+  background: #E5F0FA;
+}
+
 .node-item-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 4px;
+}
+
+/* ─── Checkbox ─── */
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.node-checkbox {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #0D99FF;
+}
+
+.node-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .node-text {

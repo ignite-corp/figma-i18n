@@ -18,6 +18,7 @@
   },
   "figma-plugin": {
     "editorType": ["figma", "dev"],
+    "capabilities": ["inspect"],
     "id": "figma-i18n-sync-plugin",
     "name": "Figma i18n Sync",
     "main": "src/main.ts",

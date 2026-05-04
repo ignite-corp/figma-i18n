@@ -34,6 +34,9 @@ const userActions: Map<
   { action: SyncItem["action"]; keyName?: string }
 > = new Map();
 
+// 체크박스 선택 상태
+const checkedNodes: Set<string> = new Set();
+
 // ─── Plugin message handling ───
 on("SCAN_RESULT", async (nodes: ExtractedNode[]) => {
   extractedNodes = nodes;
@@ -69,6 +72,7 @@ async function handleScanResult() {
 
     scanResults = response.results;
     userActions.clear();
+    checkedNodes.clear();
     render();
   } catch (err) {
     renderError(`서버 연결 실패: ${err instanceof Error ? err.message : err}`);
@@ -99,28 +103,73 @@ async function handleRefreshCache() {
   }
 }
 
+// ─── Checkbox helpers ───
+function isCheckable(status: NodeStatus): boolean {
+  return status !== "matched" && status !== "ignored";
+}
+
+function resolveAction(result: ScanResultNode): { action: SyncItem["action"]; keyName?: string } | null {
+  // userActions에 명시적으로 지정된 action이 있으면 우선
+  const explicit = userActions.get(result.nodeId);
+  if (explicit) return explicit;
+
+  // status 기반 자동 추론
+  switch (result.status) {
+    case "candidate":
+      if (result.candidates[0]) {
+        return { action: "link_existing", keyName: result.candidates[0].keyName };
+      }
+      return null;
+    case "new": {
+      const input = document.querySelector(`[data-key-input="${result.nodeId}"]`) as HTMLInputElement | null;
+      const keyName = input?.value?.trim() || result.suggestedKey || "";
+      if (!keyName) return null;
+      return { action: "create_new", keyName };
+    }
+    case "changed":
+      return { action: "update_source", keyName: result.existingMapping?.keyName };
+    default:
+      return null;
+  }
+}
+
+function toggleCheckGroup(status: NodeStatus | "all", checked: boolean) {
+  for (const result of scanResults) {
+    if (!isCheckable(result.status)) continue;
+    if (status !== "all" && result.status !== status) continue;
+    if (checked) {
+      checkedNodes.add(result.nodeId);
+    } else {
+      checkedNodes.delete(result.nodeId);
+    }
+  }
+  render();
+}
+
 // ─── Sync logic ───
 async function handleSync() {
   const items: SyncItem[] = [];
   const pluginDataUpdates: Array<{ nodeId: string; data: I18nPluginData }> = [];
 
   for (const result of scanResults) {
-    const userAction = userActions.get(result.nodeId);
-    if (!userAction) continue;
+    if (!checkedNodes.has(result.nodeId)) continue;
+
+    const resolved = resolveAction(result);
+    if (!resolved) continue;
 
     items.push({
       nodeId: result.nodeId,
-      action: userAction.action,
-      keyName: userAction.keyName,
+      action: resolved.action,
+      keyName: resolved.keyName,
       text: result.text,
       previousText: result.existingMapping?.previousText,
     });
 
-    if (userAction.action !== "ignore" && userAction.keyName) {
+    if (resolved.action !== "ignore" && resolved.keyName) {
       pluginDataUpdates.push({
         nodeId: result.nodeId,
         data: {
-          key: userAction.keyName,
+          key: resolved.keyName,
           status: "matched",
           sourceText: result.text,
           linkedAt: new Date().toISOString(),
@@ -131,7 +180,7 @@ async function handleSync() {
   }
 
   if (items.length === 0) {
-    showNotify("동기화할 항목이 없습니다. 항목을 먼저 선택해주세요.");
+    showNotify("동기화할 항목이 없습니다. 체크된 항목을 확인해주세요.");
     return;
   }
 
@@ -186,7 +235,7 @@ function render() {
     ignored: scanResults.filter((r) => r.status === "ignored").length,
   };
 
-  const pendingCount = userActions.size;
+  const checkedCount = checkedNodes.size;
 
   root.innerHTML = `
     <div class="container">
@@ -200,8 +249,8 @@ function render() {
           <button class="btn btn-secondary" id="btn-refresh-cache" ${isCacheRefreshing ? "disabled" : ""}>
             ${isCacheRefreshing ? "갱신 중..." : "캐시 갱신"}
           </button>
-          <button class="btn btn-primary" id="btn-sync" ${pendingCount === 0 ? "disabled" : ""}>
-            동기화 ${pendingCount > 0 ? `(${pendingCount})` : ""}
+          <button class="btn btn-primary" id="btn-sync" ${checkedCount === 0 ? "disabled" : ""}>
+            동기화 ${checkedCount > 0 ? `(${checkedCount})` : ""}
           </button>
         </div>
       </div>
@@ -217,6 +266,14 @@ function render() {
 
       <div class="filter-bar">
         ${renderFilterChips()}
+      </div>
+
+      <div class="group-select-bar">
+        <button class="btn btn-sm btn-secondary" data-group-select="all">전체 선택</button>
+        <button class="btn btn-sm btn-secondary" data-group-select="candidate">후보 전체</button>
+        <button class="btn btn-sm btn-secondary" data-group-select="changed">변경 전체</button>
+        <button class="btn btn-sm btn-secondary" data-group-select="new">신규 전체</button>
+        <button class="btn btn-sm btn-secondary" data-group-deselect="all">선택 해제</button>
       </div>
 
       <div class="node-list">
@@ -274,14 +331,20 @@ function renderFilterChips(): string {
 }
 
 function renderNodeItem(result: ScanResultNode): string {
-  const userAction = userActions.get(result.nodeId);
   const node = extractedNodes.find((n) => n.nodeId === result.nodeId);
+  const checkable = isCheckable(result.status);
+  const checked = checkedNodes.has(result.nodeId);
+  const resolved = checked ? resolveAction(result) : null;
 
   return `
-    <div class="node-item" data-node-id="${result.nodeId}">
+    <div class="node-item ${checked ? "node-item--checked" : ""}" data-node-id="${result.nodeId}">
       <div class="node-item-header">
-        <span class="badge badge-${result.status}">${statusLabel(result.status)}</span>
-        ${userAction ? `<span class="action-indicator">✓ ${actionLabel(userAction.action)}</span>` : ""}
+        <label class="checkbox-label">
+          <input type="checkbox" class="node-checkbox" data-check-node="${result.nodeId}"
+            ${checked ? "checked" : ""} ${!checkable ? "disabled" : ""} />
+          <span class="badge badge-${result.status}">${statusLabel(result.status)}</span>
+        </label>
+        ${resolved ? `<span class="action-indicator">✓ ${actionLabel(resolved.action)}</span>` : ""}
       </div>
       <div class="node-text">"${escapeHtml(result.text)}"</div>
       <div class="node-path">${escapeHtml(node?.parentPath ?? "")}</div>
@@ -289,18 +352,6 @@ function renderNodeItem(result: ScanResultNode): string {
       ${result.existingMapping ? renderExistingMapping(result) : ""}
       ${result.candidates.length > 0 ? renderCandidates(result) : ""}
       ${result.status === "new" || result.status === "candidate" ? renderNewKeyInput(result) : ""}
-
-      <div class="node-actions">
-        ${result.status === "candidate" && result.candidates[0]
-          ? `<button class="btn btn-sm btn-primary" data-action="link" data-node-id="${result.nodeId}" data-key="${result.candidates[0].keyName}">연결: ${escapeHtml(result.candidates[0].keyName)}</button>`
-          : ""}
-        ${result.status === "changed"
-          ? `<button class="btn btn-sm btn-primary" data-action="update" data-node-id="${result.nodeId}" data-key="${result.existingMapping?.keyName}">Source 업데이트</button>`
-          : ""}
-        ${result.status !== "matched" && result.status !== "ignored"
-          ? `<button class="btn btn-sm btn-secondary" data-action="ignore" data-node-id="${result.nodeId}">무시</button>`
-          : ""}
-      </div>
     </div>
   `;
 }
@@ -345,7 +396,6 @@ function renderNewKeyInput(result: ScanResultNode): string {
   return `
     <div class="key-input-group">
       <input class="key-input" type="text" placeholder="domain.section.element.modifier" value="${escapeHtml(currentKey)}" data-key-input="${result.nodeId}" />
-      <button class="btn btn-sm btn-primary" data-action="create" data-node-id="${result.nodeId}">신규 Key 생성</button>
     </div>
   `;
 }
@@ -440,30 +490,40 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("[data-action]").forEach((el) => {
+  // 그룹 선택 버튼
+  document.querySelectorAll("[data-group-select]").forEach((el) => {
     el.addEventListener("click", () => {
-      const action = (el as HTMLElement).dataset.action!;
-      const nodeId = (el as HTMLElement).dataset.nodeId!;
-      const key = (el as HTMLElement).dataset.key;
+      const group = (el as HTMLElement).dataset.groupSelect as NodeStatus | "all";
+      toggleCheckGroup(group, true);
+    });
+  });
 
-      if (action === "link" && key) {
-        userActions.set(nodeId, { action: "link_existing", keyName: key });
-      } else if (action === "create") {
-        const input = document.querySelector(
-          `[data-key-input="${nodeId}"]`,
-        ) as HTMLInputElement;
-        const keyName = input?.value?.trim();
-        if (!keyName) {
-          showNotify("Key 이름을 입력해주세요");
-          return;
-        }
-        userActions.set(nodeId, { action: "create_new", keyName });
-      } else if (action === "update" && key) {
-        userActions.set(nodeId, { action: "update_source", keyName: key });
-      } else if (action === "ignore") {
-        userActions.set(nodeId, { action: "ignore" });
+  document.querySelectorAll("[data-group-deselect]").forEach((el) => {
+    el.addEventListener("click", () => {
+      toggleCheckGroup("all", false);
+    });
+  });
+
+  // 개별 체크박스
+  document.querySelectorAll(".node-checkbox").forEach((el) => {
+    el.addEventListener("change", () => {
+      const nodeId = (el as HTMLInputElement).dataset.checkNode!;
+      if ((el as HTMLInputElement).checked) {
+        checkedNodes.add(nodeId);
+      } else {
+        checkedNodes.delete(nodeId);
       }
+      render();
+    });
+  });
 
+  // 후보 연결 버튼 (candidate에서 특정 후보 선택)
+  document.querySelectorAll("[data-action='link']").forEach((el) => {
+    el.addEventListener("click", () => {
+      const nodeId = (el as HTMLElement).dataset.nodeId!;
+      const key = (el as HTMLElement).dataset.key!;
+      userActions.set(nodeId, { action: "link_existing", keyName: key });
+      checkedNodes.add(nodeId);
       render();
     });
   });
