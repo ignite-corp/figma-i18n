@@ -4,8 +4,8 @@ import { readPluginData, writePluginData } from "./plugin-data";
 import type { I18nPluginData } from "shared-types";
 
 export default function () {
-  on("SCAN", () => {
-    const nodes = scanSelection();
+  on("SCAN", (payload?: { annotationCategoryIds?: string[] }) => {
+    const nodes = scanSelection(payload?.annotationCategoryIds);
     emit("SCAN_RESULT", nodes);
   });
 
