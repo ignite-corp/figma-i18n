@@ -12,8 +12,6 @@ import {
   syncItems,
   getCacheStatus,
   refreshCache,
-  setServerUrl,
-  getServerUrl,
 } from "./api-client";
 import "!./ui.css";
 
@@ -22,9 +20,7 @@ let figmaFileKey = "";
 let extractedNodes: ExtractedNode[] = [];
 let scanResults: ScanResultNode[] = [];
 let activeFilter: NodeStatus | "all" = "all";
-let serverUrlInput = getServerUrl();
 let isLoading = false;
-let userEmail = "";
 let cacheStatus: CacheStatusResponse | null = null;
 let isCacheRefreshing = false;
 
@@ -43,11 +39,7 @@ const checkedNodes: Set<string> = new Set();
 // 검색 쿼리
 let searchQuery = "";
 
-// Annotation 필터 (비어있으면 전체 스캔, 값이 있으면 categoryId로 resolve 후 필터)
-let annotationFilterLabel = "i18n";
-
-// 카테고리 이름 → categoryId 매핑 (예: { "i18n": "14539:0" })
-let annotationCategoryMap: Record<string, string> = {};
+const ANNOTATION_CATEGORY_ID = "14539:0";
 
 // ─── Plugin message handling ───
 on("SCAN_RESULT", async (nodes: ExtractedNode[]) => {
@@ -204,7 +196,7 @@ async function handleSync() {
   try {
     const response = await syncItems({
       figmaFileId: figmaFileKey || "unknown",
-      triggeredBy: userEmail || "unknown",
+      triggeredBy: "unknown",
       items,
     });
 
@@ -283,7 +275,6 @@ function render() {
 
   root.innerHTML = `
     <div class="container">
-      ${renderSettingsPanel()}
       ${renderCacheStatus()}
 
       <div class="toolbar">
@@ -333,42 +324,6 @@ function render() {
   bindEvents();
 }
 
-function renderSettingsPanel(): string {
-  return `
-    <div class="settings-panel">
-      <div class="field">
-        <label>Server URL</label>
-        <input type="text" id="server-url" value="${escapeHtml(serverUrlInput)}" />
-      </div>
-      <div class="field">
-        <label>Email</label>
-        <input type="text" id="user-email" value="${escapeHtml(userEmail)}" placeholder="your@email.com" />
-      </div>
-      <div class="field">
-        <label>Annotation 필터 <span class="field-hint">(비어있으면 전체 스캔)</span></label>
-        <input type="text" id="annotation-filter-label" value="${escapeHtml(annotationFilterLabel)}" placeholder="i18n" />
-      </div>
-      <div class="field">
-        <label>카테고리 매핑 <span class="field-hint">(이름 → categoryId)</span></label>
-        <div class="category-map-list">
-          ${Object.entries(annotationCategoryMap).map(([name, id]) => `
-            <div class="category-map-row">
-              <span class="category-map-name">${escapeHtml(name)}</span>
-              <span class="category-map-arrow">→</span>
-              <span class="category-map-id">${escapeHtml(id)}</span>
-              <button class="btn btn-sm btn-danger" data-remove-category="${escapeHtml(name)}">✕</button>
-            </div>
-          `).join("")}
-        </div>
-        <div class="category-map-add">
-          <input type="text" id="new-category-name" placeholder="이름 (예: i18n)" />
-          <input type="text" id="new-category-id" placeholder="categoryId (예: 14539:0)" />
-          <button class="btn btn-sm btn-secondary" id="btn-add-category">추가</button>
-        </div>
-      </div>
-    </div>
-  `;
-}
 
 function renderCacheStatus(): string {
   if (!cacheStatus) return "";
@@ -494,7 +449,6 @@ function renderNewKeyInput(result: ScanResultNode): string {
 function renderEmpty(message: string) {
   document.getElementById("create-figma-plugin")!.innerHTML = `
     <div class="container">
-      ${renderSettingsPanel()}
       ${renderCacheStatus()}
       <div class="toolbar">
         <span class="toolbar-title">i18n Sync</span>
@@ -517,7 +471,6 @@ function renderEmpty(message: string) {
 function renderError(message: string) {
   document.getElementById("create-figma-plugin")!.innerHTML = `
     <div class="container">
-      ${renderSettingsPanel()}
       ${renderCacheStatus()}
       <div class="toolbar">
         <span class="toolbar-title">i18n Sync</span>
@@ -553,42 +506,8 @@ function setLoading(loading: boolean) {
 
 // ─── Event Binding ───
 function bindEvents() {
-  document.getElementById("server-url")?.addEventListener("change", (e) => {
-    serverUrlInput = (e.target as HTMLInputElement).value;
-    setServerUrl(serverUrlInput);
-  });
-
-  document.getElementById("user-email")?.addEventListener("change", (e) => {
-    userEmail = (e.target as HTMLInputElement).value;
-  });
-
-  document.getElementById("annotation-filter-label")?.addEventListener("change", (e) => {
-    annotationFilterLabel = (e.target as HTMLInputElement).value;
-  });
-
-  document.getElementById("btn-add-category")?.addEventListener("click", () => {
-    const nameEl = document.getElementById("new-category-name") as HTMLInputElement | null;
-    const idEl = document.getElementById("new-category-id") as HTMLInputElement | null;
-    const name = nameEl?.value.trim();
-    const id = idEl?.value.trim();
-    if (name && id) {
-      annotationCategoryMap[name] = id;
-      render();
-    }
-  });
-
-  document.querySelectorAll("[data-remove-category]").forEach((el) => {
-    el.addEventListener("click", () => {
-      const name = (el as HTMLElement).dataset.removeCategory!;
-      delete annotationCategoryMap[name];
-      render();
-    });
-  });
-
   document.getElementById("btn-scan")?.addEventListener("click", () => {
-    const label = annotationFilterLabel.trim();
-    const categoryId = label ? annotationCategoryMap[label] : undefined;
-    emit("SCAN", categoryId ? { annotationCategoryIds: [categoryId] } : undefined);
+    emit("SCAN", { annotationCategoryIds: [ANNOTATION_CATEGORY_ID] });
   });
 
   document.getElementById("btn-sync")?.addEventListener("click", () => {
