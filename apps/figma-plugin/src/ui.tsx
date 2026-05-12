@@ -267,15 +267,6 @@ function render() {
       })
     : filtered;
 
-  const summary = {
-    total: scanResults.length,
-    matched: scanResults.filter((r) => r.status === "matched").length,
-    candidate: scanResults.filter((r) => r.status === "candidate").length,
-    new: scanResults.filter((r) => r.status === "new").length,
-    changed: scanResults.filter((r) => r.status === "changed").length,
-    ignored: scanResults.filter((r) => r.status === "ignored").length,
-  };
-
   const checkedCount = checkedNodes.size;
 
   root.innerHTML = `
@@ -284,25 +275,16 @@ function render() {
       ${renderCacheStatus()}
 
       <div class="toolbar">
-        <span class="toolbar-title">i18n Scan Results</span>
+        <span class="toolbar-title">i18n Sync</span>
         <div class="toolbar-actions">
           <button class="btn btn-secondary" id="btn-scan">스캔</button>
           <button class="btn btn-secondary" id="btn-refresh-cache" ${isCacheRefreshing ? "disabled" : ""}>
             ${isCacheRefreshing ? "갱신 중..." : "캐시 갱신"}
           </button>
           <button class="btn btn-primary" id="btn-sync" ${checkedCount === 0 ? "disabled" : ""}>
-            동기화 ${checkedCount > 0 ? `(${checkedCount})` : ""}
+            동기화${checkedCount > 0 ? ` (${checkedCount})` : ""}
           </button>
         </div>
-      </div>
-
-      <div class="summary-bar">
-        <span class="summary-item">전체 <span class="summary-count">${summary.total}</span></span>
-        <span class="summary-item">매칭 <span class="summary-count">${summary.matched}</span></span>
-        <span class="summary-item">후보 <span class="summary-count">${summary.candidate}</span></span>
-        <span class="summary-item">신규 <span class="summary-count">${summary.new}</span></span>
-        <span class="summary-item">변경 <span class="summary-count">${summary.changed}</span></span>
-        <span class="summary-item">무시 <span class="summary-count">${summary.ignored}</span></span>
       </div>
 
       <div class="filter-bar">
@@ -310,15 +292,16 @@ function render() {
       </div>
 
       <div class="search-bar">
-        <input class="search-input" type="text" id="search-input" placeholder="\ud83d\udd0d key \ub610\ub294 \ud14d\uc2a4\ud2b8 \uac80\uc0c9..." value="${escapeHtml(searchQuery)}" />
+        <input class="search-input" type="text" id="search-input" placeholder="key 또는 텍스트 검색..." value="${escapeHtml(searchQuery)}" />
       </div>
 
       <div class="group-select-bar">
-        <button class="btn btn-sm btn-secondary" data-group-select="all">전체 선택</button>
-        <button class="btn btn-sm btn-secondary" data-group-select="candidate">후보 전체</button>
-        <button class="btn btn-sm btn-secondary" data-group-select="changed">변경 전체</button>
-        <button class="btn btn-sm btn-secondary" data-group-select="new">신규 전체</button>
-        <button class="btn btn-sm btn-secondary" data-group-deselect="all">선택 해제</button>
+        <button class="btn btn-sm btn-ghost" data-group-select="all">전체 선택</button>
+        <button class="btn btn-sm btn-ghost" data-group-select="candidate">후보</button>
+        <button class="btn btn-sm btn-ghost" data-group-select="changed">변경</button>
+        <button class="btn btn-sm btn-ghost" data-group-select="new">신규</button>
+        <span class="group-select-divider"></span>
+        <button class="btn btn-sm btn-ghost" data-group-deselect="all">선택 해제</button>
       </div>
 
       <div class="node-list">
@@ -334,16 +317,10 @@ function render() {
 function renderProjectSelector(): string {
   return `
     <div class="project-selector">
-      <label class="project-selector-label">프로젝트</label>
-      <div class="project-selector-options">
-        <label class="project-option">
-          <input type="radio" name="project" value="dealer-fo" ${selectedProject === "dealer-fo" ? "checked" : ""} />
-          FO
-        </label>
-        <label class="project-option">
-          <input type="radio" name="project" value="dealer-bo" ${selectedProject === "dealer-bo" ? "checked" : ""} />
-          BO
-        </label>
+      <span class="project-selector-label">Project</span>
+      <div class="project-toggle">
+        <button class="project-tab ${selectedProject === "dealer-fo" ? "active" : ""}" data-project="dealer-fo">FO</button>
+        <button class="project-tab ${selectedProject === "dealer-bo" ? "active" : ""}" data-project="dealer-bo">BO</button>
       </div>
     </div>
   `;
@@ -362,6 +339,15 @@ function renderCacheStatus(): string {
 }
 
 function renderFilterChips(): string {
+  const counts: Record<string, number> = {
+    all: scanResults.length,
+    matched: scanResults.filter((r) => r.status === "matched").length,
+    candidate: scanResults.filter((r) => r.status === "candidate").length,
+    new: scanResults.filter((r) => r.status === "new").length,
+    changed: scanResults.filter((r) => r.status === "changed").length,
+    ignored: scanResults.filter((r) => r.status === "ignored").length,
+  };
+
   const filters: Array<{ key: NodeStatus | "all"; label: string }> = [
     { key: "all", label: "전체" },
     { key: "candidate", label: "후보" },
@@ -374,7 +360,9 @@ function renderFilterChips(): string {
   return filters
     .map(
       (f) =>
-        `<button class="filter-chip ${activeFilter === f.key ? "active" : ""}" data-filter="${f.key}">${f.label}</button>`,
+        `<button class="filter-chip ${activeFilter === f.key ? "active" : ""}" data-filter="${f.key}">
+          ${f.label}${counts[f.key] > 0 ? `<span class="chip-count">${counts[f.key]}</span>` : ""}
+        </button>`,
     )
     .join("");
 }
@@ -530,9 +518,10 @@ function setLoading(loading: boolean) {
 
 // ─── Event Binding ───
 function bindEvents() {
-  document.querySelectorAll("input[name='project']").forEach((el) => {
-    el.addEventListener("change", () => {
-      selectedProject = (el as HTMLInputElement).value as "dealer-fo" | "dealer-bo";
+  document.querySelectorAll("[data-project]").forEach((el) => {
+    el.addEventListener("click", () => {
+      selectedProject = (el as HTMLElement).dataset.project as "dealer-fo" | "dealer-bo";
+      render();
     });
   });
 
