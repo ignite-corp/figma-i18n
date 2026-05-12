@@ -41,6 +41,9 @@ let searchQuery = "";
 
 const ANNOTATION_CATEGORY_ID = "14539:0";
 
+// Lokalise 프로젝트 선택 (FO / BO)
+let selectedProject: "dealer-fo" | "dealer-bo" = "dealer-fo";
+
 // ─── Plugin message handling ───
 on("SCAN_RESULT", async (nodes: ExtractedNode[]) => {
   extractedNodes = nodes;
@@ -72,6 +75,7 @@ async function handleScanResult() {
     const response = await scanNodes({
       figmaFileId: figmaFileKey || "unknown",
       nodes: extractedNodes,
+      projectId: selectedProject,
     });
 
     scanResults = response.results;
@@ -198,6 +202,7 @@ async function handleSync() {
       figmaFileId: figmaFileKey || "unknown",
       triggeredBy: "unknown",
       items,
+      projectId: selectedProject,
     });
 
     if (pluginDataUpdates.length > 0) {
@@ -275,6 +280,7 @@ function render() {
 
   root.innerHTML = `
     <div class="container">
+      ${renderProjectSelector()}
       ${renderCacheStatus()}
 
       <div class="toolbar">
@@ -324,6 +330,24 @@ function render() {
   bindEvents();
 }
 
+
+function renderProjectSelector(): string {
+  return `
+    <div class="project-selector">
+      <label class="project-selector-label">프로젝트</label>
+      <div class="project-selector-options">
+        <label class="project-option">
+          <input type="radio" name="project" value="dealer-fo" ${selectedProject === "dealer-fo" ? "checked" : ""} />
+          FO
+        </label>
+        <label class="project-option">
+          <input type="radio" name="project" value="dealer-bo" ${selectedProject === "dealer-bo" ? "checked" : ""} />
+          BO
+        </label>
+      </div>
+    </div>
+  `;
+}
 
 function renderCacheStatus(): string {
   if (!cacheStatus) return "";
@@ -506,6 +530,12 @@ function setLoading(loading: boolean) {
 
 // ─── Event Binding ───
 function bindEvents() {
+  document.querySelectorAll("input[name='project']").forEach((el) => {
+    el.addEventListener("change", () => {
+      selectedProject = (el as HTMLInputElement).value as "dealer-fo" | "dealer-bo";
+    });
+  });
+
   document.getElementById("btn-scan")?.addEventListener("click", () => {
     emit("SCAN", { annotationCategoryIds: [ANNOTATION_CATEGORY_ID] });
   });

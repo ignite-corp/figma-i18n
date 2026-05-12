@@ -21,6 +21,7 @@ export interface SyncRequest {
   figmaFileId: string;
   triggeredBy: string;
   items: SyncItem[];
+  projectId?: string;
 }
 
 export interface SyncResultItem {

@@ -25,6 +25,7 @@ export interface ExistingNodeMapping {
 export interface ScanRequest {
   figmaFileId: string;
   nodes: ExtractedNode[];
+  projectId?: string;
 }
 
 /** 매칭 후보 */
