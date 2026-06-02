@@ -7,9 +7,10 @@ const root = resolve(__dirname, "..");
 
 const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf-8"));
 
+// manifest.json에서 version 필드 제거 (Figma가 허용하지 않음)
 const manifestPath = resolve(root, "manifest.json");
 const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
-manifest.version = pkg.version;
+delete manifest.version;
 writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
 
-console.log(`✅ manifest version synced: ${pkg.version}`);
+console.log(`✅ version synced: ${pkg.version}`);
