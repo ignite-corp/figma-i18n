@@ -547,16 +547,19 @@ function renderNewKeyInput(result: ScanResultNode): string {
 function renderEmpty(message: string) {
   document.getElementById("create-figma-plugin")!.innerHTML = `
     <div class="container">
+      ${renderProjectSelector()}
       ${renderCacheStatus()}
       <div class="toolbar">
         <span class="toolbar-title">i18n Sync</span>
         <div class="toolbar-actions">
+          <button class="btn btn-sm btn-ghost" id="btn-settings" title="H Chat 설정">⚙</button>
           <button class="btn btn-secondary" id="btn-refresh-cache" ${isCacheRefreshing ? "disabled" : ""}>
             ${isCacheRefreshing ? "갱신 중..." : "캐시 갱신"}
           </button>
           <button class="btn btn-primary" id="btn-scan">스캔</button>
         </div>
       </div>
+      ${showSettings ? renderSettingsPanel() : ""}
       <div class="state-view">
         <div class="state-icon">🔍</div>
         <div class="state-message">${message}</div>
@@ -569,16 +572,19 @@ function renderEmpty(message: string) {
 function renderError(message: string) {
   document.getElementById("create-figma-plugin")!.innerHTML = `
     <div class="container">
+      ${renderProjectSelector()}
       ${renderCacheStatus()}
       <div class="toolbar">
         <span class="toolbar-title">i18n Sync</span>
         <div class="toolbar-actions">
+          <button class="btn btn-sm btn-ghost" id="btn-settings" title="H Chat 설정">⚙</button>
           <button class="btn btn-secondary" id="btn-refresh-cache" ${isCacheRefreshing ? "disabled" : ""}>
             ${isCacheRefreshing ? "갱신 중..." : "캐시 갱신"}
           </button>
           <button class="btn btn-primary" id="btn-scan">스캔</button>
         </div>
       </div>
+      ${showSettings ? renderSettingsPanel() : ""}
       <div class="state-view error">
         <div class="state-icon">⚠️</div>
         <div class="state-message">${message}</div>
