@@ -1,6 +1,6 @@
 [build]
 builder = "nixpacks"
-buildCommand = "pnpm install --frozen-lockfile && pnpm build:server"
+buildCommand = "pnpm install --frozen-lockfile && pnpm --filter sync-server exec prisma generate && pnpm build:server"
 watchPatterns = ["apps/sync-server/**", "packages/**", "tsconfig.base.json", "pnpm-lock.yaml", "railway.toml"]
 
 [deploy]
