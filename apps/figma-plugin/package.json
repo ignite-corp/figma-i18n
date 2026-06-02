@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "build-figma-plugin --typecheck --watch",
-    "build": "build-figma-plugin --typecheck --minify"
+    "build": "build-figma-plugin --typecheck --minify && node scripts/sync-version.mjs"
   },
   "dependencies": {
     "shared-types": "workspace:*",

@@ -103,6 +103,16 @@ body {
   font-weight: 700;
   color: #1E1E1E;
   letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbar-version {
+  font-size: 10px;
+  font-weight: 500;
+  color: #AAA;
+  letter-spacing: 0;
 }
 
 .toolbar-actions {

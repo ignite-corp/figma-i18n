@@ -1,4 +1,5 @@
 import { on, emit } from "@create-figma-plugin/utilities";
+import { VERSION } from "./version";
 import type {
   ExtractedNode,
   ScanResultNode,
@@ -370,7 +371,7 @@ function render() {
       ${renderCacheStatus()}
 
       <div class="toolbar">
-        <span class="toolbar-title">i18n Sync</span>
+        <span class="toolbar-title">i18n Sync <span class="toolbar-version">v${VERSION}</span></span>
         <div class="toolbar-actions">
           <button class="btn btn-ghost btn-icon" id="btn-settings" title="H Chat 설정">⚙</button>
           <button class="btn btn-secondary" id="btn-scan">스캔</button>
@@ -574,7 +575,7 @@ function renderEmpty(message: string) {
       ${renderProjectSelector()}
       ${renderCacheStatus()}
       <div class="toolbar">
-        <span class="toolbar-title">i18n Sync</span>
+        <span class="toolbar-title">i18n Sync <span class="toolbar-version">v${VERSION}</span></span>
         <div class="toolbar-actions">
           <button class="btn btn-ghost btn-icon" id="btn-settings" title="H Chat 설정">⚙</button>
           <button class="btn btn-secondary" id="btn-refresh-cache" ${isCacheRefreshing ? "disabled" : ""}>
@@ -599,7 +600,7 @@ function renderError(message: string) {
       ${renderProjectSelector()}
       ${renderCacheStatus()}
       <div class="toolbar">
-        <span class="toolbar-title">i18n Sync</span>
+        <span class="toolbar-title">i18n Sync <span class="toolbar-version">v${VERSION}</span></span>
         <div class="toolbar-actions">
           <button class="btn btn-ghost btn-icon" id="btn-settings" title="H Chat 설정">⚙</button>
           <button class="btn btn-secondary" id="btn-refresh-cache" ${isCacheRefreshing ? "disabled" : ""}>
