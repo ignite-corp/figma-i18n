@@ -4,7 +4,7 @@ buildCommand = "pnpm install --frozen-lockfile && pnpm --filter sync-server exec
 watchPatterns = ["apps/sync-server/**", "packages/**", "tsconfig.base.json", "pnpm-lock.yaml", "railway.toml"]
 
 [deploy]
-startCommand = "pnpm --filter sync-server exec prisma migrate deploy && node apps/sync-server/dist/index.js"
+startCommand = "pnpm --filter sync-server exec prisma db push --skip-generate && node apps/sync-server/dist/index.js"
 healthcheckPath = "/health"
 healthcheckTimeout = 120
 restartPolicyType = "on_failure"
