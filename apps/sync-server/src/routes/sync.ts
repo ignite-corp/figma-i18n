@@ -15,6 +15,7 @@ const syncBodySchema = z.object({
       text: z.string(),
       previousText: z.string().optional(),
       value: z.string().optional(),
+      frTranslations: z.record(z.string()).optional(),
     }),
   ),
 });

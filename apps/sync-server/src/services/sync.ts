@@ -3,7 +3,7 @@ import { prisma } from "../lib/prisma";
 import { loadConfig, resolveProjectId } from "../config";
 import { getLokaliseClient } from "./cache";
 import { logger } from "../lib/logger";
-import { translateEnToFr, isFrenchLocale, isEnglishLocale } from "./translation";
+import { isFrenchLocale, isEnglishLocale } from "./translation";
 
 const config = loadConfig();
 
@@ -29,12 +29,10 @@ export async function processSyncItems(
     "Resolved project languages",
   );
 
-  const hChatApiKey = config.H_CHAT_API_KEY;
-
   for (const item of items) {
     try {
       const result = await processSingleItem(
-        figmaFileId, triggeredBy, item, projectId, lokalise, targetLanguages, hChatApiKey,
+        figmaFileId, triggeredBy, item, projectId, lokalise, targetLanguages,
       );
       results.push(result);
     } catch (err) {
@@ -53,29 +51,22 @@ export async function processSyncItems(
 }
 
 /**
- * base language가 EN일 때 FR 계열 언어를 자동 번역하여 translations 배열을 반환.
- * H_CHAT_API_KEY 없거나 EN 기반이 아니면 모든 언어에 원문 그대로 반환.
+ * frTranslations가 있으면 FR 계열 언어에 해당 번역을 사용.
+ * 없으면 모든 언어에 원문 그대로 반환.
  */
-async function buildTranslations(
+function buildTranslations(
   baseLanguage: string,
   targetLanguages: string[],
   sourceText: string,
-  hChatApiKey?: string,
-): Promise<Array<{ language_iso: string; translation: string }>> {
+  frTranslations?: Record<string, string>,
+): Array<{ language_iso: string; translation: string }> {
   const allLanguages = [baseLanguage, ...targetLanguages];
 
-  if (isEnglishLocale(baseLanguage) && hChatApiKey) {
-    const frLanguages = targetLanguages.filter(isFrenchLocale);
-    if (frLanguages.length > 0) {
-      const textsToTranslate = Object.fromEntries(frLanguages.map((lang) => [lang, sourceText]));
-      const translated = await translateEnToFr(textsToTranslate, hChatApiKey);
-      logger.debug({ frLanguages, translated }, "FR translation result");
-
-      return allLanguages.map((lang) => ({
-        language_iso: lang,
-        translation: isFrenchLocale(lang) ? (translated[lang] ?? sourceText) : sourceText,
-      }));
-    }
+  if (isEnglishLocale(baseLanguage) && frTranslations) {
+    return allLanguages.map((lang) => ({
+      language_iso: lang,
+      translation: isFrenchLocale(lang) ? (frTranslations[lang] ?? sourceText) : sourceText,
+    }));
   }
 
   return allLanguages.map((lang) => ({ language_iso: lang, translation: sourceText }));
@@ -88,7 +79,6 @@ async function processSingleItem(
   projectId: string,
   lokalise: ReturnType<typeof getLokaliseClient>,
   targetLanguages: string[],
-  hChatApiKey?: string,
 ): Promise<SyncResultItem> {
   switch (item.action) {
     case "create_new": {
@@ -97,9 +87,8 @@ async function processSingleItem(
       // value가 명시적으로 지정된 경우 해당 값 사용, 없으면 Figma 텍스트 사용
       const sourceText = item.value ?? item.text;
 
-      // base language + target languages 모두에 번역 설정 (FR 계열은 자동 번역)
-      const translations = await buildTranslations(
-        lokalise.baseLanguage, targetLanguages, sourceText, hChatApiKey,
+      const translations = buildTranslations(
+        lokalise.baseLanguage, targetLanguages, sourceText, item.frTranslations,
       );
 
       // Lokalise에 key 생성
@@ -213,9 +202,8 @@ async function processSingleItem(
       });
 
       if (cached) {
-        // FR 계열은 자동 번역, EN 계열은 원문 유지
-        const translations = await buildTranslations(
-          lokalise.baseLanguage, targetLanguages, sourceText, hChatApiKey,
+        const translations = buildTranslations(
+          lokalise.baseLanguage, targetLanguages, sourceText, item.frTranslations,
         );
         const targetOnlyTranslations = translations
           .filter((t) => t.language_iso !== lokalise.baseLanguage)

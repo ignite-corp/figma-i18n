@@ -47,6 +47,10 @@ declare const styles: {
   readonly "project-toggle": string;
   readonly "search-bar": string;
   readonly "search-input": string;
+  readonly "settings-input": string;
+  readonly "settings-label": string;
+  readonly "settings-panel": string;
+  readonly "settings-row": string;
   readonly "spin": string;
   readonly "state-icon": string;
   readonly "state-message": string;

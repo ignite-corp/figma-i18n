@@ -167,6 +167,38 @@ body {
 }
 
 /* ─── Search Bar ─── */
+.settings-panel {
+  padding: 8px 12px;
+  border-bottom: 1px solid #EBEBEB;
+  flex-shrink: 0;
+  background: #FAFAFA;
+}
+
+.settings-label {
+  display: block;
+  font-size: 10px;
+  color: #888;
+  margin-bottom: 6px;
+}
+
+.settings-row {
+  display: flex;
+  gap: 6px;
+}
+
+.settings-input {
+  flex: 1;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #E0E0E0;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #1E1E1E;
+  background: #F5F5F5;
+  outline: none;
+  font-family: inherit;
+}
+
 .search-bar {
   padding: 8px 12px;
   border-bottom: 1px solid #EBEBEB;

@@ -44,6 +44,12 @@ const ANNOTATION_CATEGORY_IDS = ["14539:0", "12208:0"];
 // Lokalise 프로젝트 선택 (FO / BO)
 let selectedProject: "dealer-fo" | "dealer-bo" = "dealer-fo";
 
+// H Chat 설정
+const HCHAT_ENDPOINT = "https://internal-apigw-kr.hmg-corp.io/hchat-in/api/v3/openai/responses";
+const HCHAT_FR_LOCALES = ["fr", "fr_CA"];
+let hChatApiKey: string = localStorage.getItem("hchat_api_key") ?? "";
+let showSettings = false;
+
 // ─── Plugin message handling ───
 on("SCAN_RESULT", async (nodes: ExtractedNode[]) => {
   extractedNodes = nodes;
@@ -155,6 +161,47 @@ function toggleCheckGroup(status: NodeStatus | "all", checked: boolean) {
   render();
 }
 
+// ─── H Chat 번역 ───
+async function translateToFr(texts: Record<string, string>): Promise<Record<string, string>> {
+  const body = {
+    model: "gpt-5.4",
+    instructions:
+      "You are a professional software localization translator. Translate the input JSON values from English to French. " +
+      "Preserve the exact JSON structure and all keys. Translate only string values intended for users. " +
+      "Do not translate keys, variable names, placeholders, HTML tags, ICU message syntax, URLs, or code snippets. " +
+      "Keep newline characters, escape sequences, punctuation, and spacing consistent. Return valid JSON only.",
+    input: [{ role: "user", content: [{ type: "input_text", text: JSON.stringify(texts) }] }],
+    text: { format: { type: "text" }, verbosity: "medium" },
+    temperature: 0.2,
+    max_output_tokens: 4000,
+    stream: false,
+    truncation: "auto",
+  };
+
+  try {
+    const res = await fetch(HCHAT_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${hChatApiKey}` },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      showNotify(`H Chat 번역 실패 (${res.status}) — 원문으로 동기화합니다.`);
+      return texts;
+    }
+    const data = await res.json() as { output?: Array<{ content?: Array<{ text?: string }> }> };
+    const rawText = data?.output?.[0]?.content?.[0]?.text ?? "";
+    const translated = JSON.parse(rawText) as Record<string, string>;
+    const result: Record<string, string> = {};
+    for (const [k, v] of Object.entries(texts)) {
+      result[k] = typeof translated[k] === "string" ? translated[k] : v;
+    }
+    return result;
+  } catch {
+    showNotify("H Chat 번역 오류 — 원문으로 동기화합니다.");
+    return texts;
+  }
+}
+
 // ─── Sync logic ───
 async function handleSync() {
   const items: SyncItem[] = [];
@@ -193,6 +240,25 @@ async function handleSync() {
   if (items.length === 0) {
     showNotify("동기화할 항목이 없습니다. 체크된 항목을 확인해주세요.");
     return;
+  }
+
+  // H Chat EN→FR 번역 (VPN 연결 + API Key 있을 때만)
+  if (hChatApiKey) {
+    const toTranslate: Record<string, string> = {};
+    for (const item of items) {
+      if (item.action === "create_new" || item.action === "update_source") {
+        toTranslate[item.nodeId] = item.value ?? item.text;
+      }
+    }
+    if (Object.keys(toTranslate).length > 0) {
+      const translated = await translateToFr(toTranslate);
+      for (const item of items) {
+        const frText = translated[item.nodeId];
+        if (frText) {
+          item.frTranslations = Object.fromEntries(HCHAT_FR_LOCALES.map((l) => [l, frText]));
+        }
+      }
+    }
   }
 
   setLoading(true);
@@ -277,6 +343,7 @@ function render() {
       <div class="toolbar">
         <span class="toolbar-title">i18n Sync</span>
         <div class="toolbar-actions">
+          <button class="btn btn-sm btn-ghost" id="btn-settings" title="H Chat 설정">⚙</button>
           <button class="btn btn-secondary" id="btn-scan">스캔</button>
           <button class="btn btn-secondary" id="btn-refresh-cache" ${isCacheRefreshing ? "disabled" : ""}>
             ${isCacheRefreshing ? "갱신 중..." : "캐시 갱신"}
@@ -286,6 +353,8 @@ function render() {
           </button>
         </div>
       </div>
+
+      ${showSettings ? renderSettingsPanel() : ""}
 
       <div class="filter-bar">
         ${renderFilterChips()}
@@ -313,6 +382,18 @@ function render() {
   bindEvents();
 }
 
+
+function renderSettingsPanel(): string {
+  return `
+    <div class="settings-panel">
+      <label class="settings-label">H Chat API Key ${hChatApiKey ? "✓" : "(미설정 — FR 번역 비활성)"}</label>
+      <div class="settings-row">
+        <input class="settings-input" type="password" id="hchat-api-key" value="${escapeHtml(hChatApiKey)}" placeholder="Bearer token..." />
+        <button class="btn btn-sm btn-secondary" id="btn-save-hchat-key">저장</button>
+      </div>
+    </div>
+  `;
+}
 
 function renderProjectSelector(): string {
   return `
@@ -535,6 +616,20 @@ function bindEvents() {
 
   document.getElementById("btn-refresh-cache")?.addEventListener("click", () => {
     handleRefreshCache();
+  });
+
+  document.getElementById("btn-settings")?.addEventListener("click", () => {
+    showSettings = !showSettings;
+    render();
+  });
+
+  document.getElementById("btn-save-hchat-key")?.addEventListener("click", () => {
+    const input = document.getElementById("hchat-api-key") as HTMLInputElement | null;
+    if (!input) return;
+    hChatApiKey = input.value.trim();
+    localStorage.setItem("hchat_api_key", hChatApiKey);
+    showNotify(hChatApiKey ? "H Chat API Key 저장됨" : "H Chat API Key 삭제됨");
+    render();
   });
 
   document.querySelectorAll("[data-filter]").forEach((el) => {

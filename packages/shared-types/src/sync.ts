@@ -15,6 +15,8 @@ export interface SyncItem {
   previousText?: string;
   /** 사용자가 명시적으로 지정한 번역 value (없으면 text 사용) */
   value?: string;
+  /** 플러그인이 H Chat으로 번역한 FR 계열 결과 { fr: "...", fr_CA: "..." } */
+  frTranslations?: Record<string, string>;
 }
 
 export interface SyncRequest {
