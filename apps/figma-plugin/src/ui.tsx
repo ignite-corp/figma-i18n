@@ -168,30 +168,6 @@ function toggleCheckGroup(status: NodeStatus | "all", checked: boolean) {
 }
 
 // ─── H Chat 번역 ───
-async function validateHChatKey(apiKey: string): Promise<"valid" | "invalid" | "network_error"> {
-  const body = {
-    model: "gpt-5.4",
-    instructions: "Reply with the word OK.",
-    input: [{ role: "user", content: [{ type: "input_text", text: "ping" }] }],
-    text: { format: { type: "text" }, verbosity: "low" },
-    temperature: 0,
-    max_output_tokens: 5,
-    stream: false,
-  };
-  try {
-    const res = await fetch(HCHAT_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(body),
-    });
-    if (res.status === 401 || res.status === 403) return "invalid";
-    if (!res.ok) return "invalid";
-    return "valid";
-  } catch {
-    return "network_error";
-  }
-}
-
 async function translateToFr(texts: Record<string, string>): Promise<Record<string, string>> {
   const body = {
     model: "gpt-5.4",
@@ -659,40 +635,13 @@ function bindEvents() {
     render();
   });
 
-  document.getElementById("btn-save-hchat-key")?.addEventListener("click", async () => {
+  document.getElementById("btn-save-hchat-key")?.addEventListener("click", () => {
     const input = document.getElementById("hchat-api-key") as HTMLInputElement | null;
-    const btn = document.getElementById("btn-save-hchat-key") as HTMLButtonElement | null;
-    if (!input || !btn) return;
-
-    const key = input.value.trim();
-
-    if (!key) {
-      hChatApiKey = "";
-      emit("SET_HCHAT_KEY", { key: "" });
-      showNotify("H Chat API Key 삭제됨");
-      render();
-      return;
-    }
-
-    btn.disabled = true;
-    btn.textContent = "확인 중...";
-
-    const result = await validateHChatKey(key);
-
-    if (result === "valid") {
-      hChatApiKey = key;
-      emit("SET_HCHAT_KEY", { key });
-      showNotify("✅ H Chat API Key 유효 — 저장됨");
-      render();
-    } else if (result === "invalid") {
-      showNotify("❌ H Chat API Key가 유효하지 않습니다.");
-      btn.disabled = false;
-      btn.textContent = "저장";
-    } else {
-      showNotify("⚠️ VPN 연결을 확인해주세요 (H Chat 서버 연결 실패)");
-      btn.disabled = false;
-      btn.textContent = "저장";
-    }
+    if (!input) return;
+    hChatApiKey = input.value.trim();
+    emit("SET_HCHAT_KEY", { key: hChatApiKey });
+    showNotify(hChatApiKey ? "H Chat API Key 저장됨" : "H Chat API Key 삭제됨");
+    render();
   });
 
   document.querySelectorAll("[data-filter]").forEach((el) => {
