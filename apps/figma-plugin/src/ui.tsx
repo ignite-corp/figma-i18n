@@ -58,6 +58,7 @@ on("SCAN_RESULT", async (nodes: ExtractedNode[]) => {
 
 on("FILE_KEY", (fileKey: string) => {
   figmaFileKey = fileKey;
+  emit("GET_HCHAT_KEY");
 });
 
 on("HCHAT_KEY", (key: string) => {
@@ -757,7 +758,6 @@ function actionLabel(action: SyncItem["action"]): string {
 }
 
 // ─── Initial render ───
-emit("GET_HCHAT_KEY");
 renderEmpty("Frame을 선택하고 [스캔] 버튼을 눌러주세요");
 
 getCacheStatus()
