@@ -17,5 +17,5 @@
     ],
     "reasoning": "Sync server 통신을 위해 필요"
   },
-  "version": "0.0.1"
+  "version": "0.0.2"
 }

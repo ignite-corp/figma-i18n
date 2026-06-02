@@ -10,6 +10,7 @@ declare const styles: {
   readonly "btn": string;
   readonly "btn-danger": string;
   readonly "btn-ghost": string;
+  readonly "btn-icon": string;
   readonly "btn-primary": string;
   readonly "btn-secondary": string;
   readonly "btn-sm": string;
@@ -58,6 +59,7 @@ declare const styles: {
   readonly "toolbar": string;
   readonly "toolbar-actions": string;
   readonly "toolbar-title": string;
+  readonly "toolbar-version": string;
   readonly "value-input": string;
   readonly "value-input-group": string;
   readonly "value-label": string;
