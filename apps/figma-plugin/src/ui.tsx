@@ -39,7 +39,7 @@ const checkedNodes: Set<string> = new Set();
 // 검색 쿼리
 let searchQuery = "";
 
-const ANNOTATION_CATEGORY_ID = "14539:0";
+const ANNOTATION_CATEGORY_IDS = ["14539:0", "12208:0"];
 
 // Lokalise 프로젝트 선택 (FO / BO)
 let selectedProject: "dealer-fo" | "dealer-bo" = "dealer-fo";
@@ -526,7 +526,7 @@ function bindEvents() {
   });
 
   document.getElementById("btn-scan")?.addEventListener("click", () => {
-    emit("SCAN", { annotationCategoryIds: [ANNOTATION_CATEGORY_ID] });
+    emit("SCAN", { annotationCategoryIds: ANNOTATION_CATEGORY_IDS });
   });
 
   document.getElementById("btn-sync")?.addEventListener("click", () => {
