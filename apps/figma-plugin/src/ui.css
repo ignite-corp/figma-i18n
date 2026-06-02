@@ -587,6 +587,18 @@ body {
   border-radius: 4px;
 }
 
+.btn-icon {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 16px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 /* ─── State Views (empty / error / loading) ─── */
 .state-view {
   display: flex;
