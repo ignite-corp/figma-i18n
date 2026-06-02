@@ -47,7 +47,7 @@ let selectedProject: "dealer-fo" | "dealer-bo" = "dealer-fo";
 // H Chat 설정
 const HCHAT_ENDPOINT = "https://internal-apigw-kr.hmg-corp.io/hchat-in/api/v3/openai/responses";
 const HCHAT_FR_LOCALES = ["fr", "fr_CA"];
-let hChatApiKey: string = localStorage.getItem("hchat_api_key") ?? "";
+let hChatApiKey = "";
 let showSettings = false;
 
 // ─── Plugin message handling ───
@@ -58,6 +58,10 @@ on("SCAN_RESULT", async (nodes: ExtractedNode[]) => {
 
 on("FILE_KEY", (fileKey: string) => {
   figmaFileKey = fileKey;
+});
+
+on("HCHAT_KEY", (key: string) => {
+  hChatApiKey = key;
 });
 
 on("SELECTION_CHANGED", (_payload: { hasSelection: boolean; count: number }) => {
@@ -627,7 +631,7 @@ function bindEvents() {
     const input = document.getElementById("hchat-api-key") as HTMLInputElement | null;
     if (!input) return;
     hChatApiKey = input.value.trim();
-    localStorage.setItem("hchat_api_key", hChatApiKey);
+    emit("SET_HCHAT_KEY", { key: hChatApiKey });
     showNotify(hChatApiKey ? "H Chat API Key 저장됨" : "H Chat API Key 삭제됨");
     render();
   });
@@ -753,6 +757,7 @@ function actionLabel(action: SyncItem["action"]): string {
 }
 
 // ─── Initial render ───
+emit("GET_HCHAT_KEY");
 renderEmpty("Frame을 선택하고 [스캔] 버튼을 눌러주세요");
 
 getCacheStatus()
