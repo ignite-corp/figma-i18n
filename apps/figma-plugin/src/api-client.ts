@@ -8,7 +8,7 @@ import type {
   KeySearchResponse,
 } from "shared-types";
 
-let serverUrl = "http://localhost:3001";
+let serverUrl = "https://sync-server-production-f593.up.railway.app";
 
 export function setServerUrl(url: string) {
   serverUrl = url.replace(/\/+$/, "");
