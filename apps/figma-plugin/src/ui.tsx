@@ -184,25 +184,37 @@ async function translateToFr(texts: Record<string, string>): Promise<Record<stri
     truncation: "auto",
   };
 
+  const count = Object.keys(texts).length;
+  console.log(`[HChat] 번역 요청 — ${count}개 텍스트`, texts);
+
   try {
     const res = await fetch(HCHAT_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${hChatApiKey}` },
       body: JSON.stringify(body),
     });
+
+    console.log(`[HChat] 응답 status: ${res.status}`);
+
     if (!res.ok) {
+      console.error(`[HChat] 요청 실패 (${res.status})`);
       showNotify(`H Chat 번역 실패 (${res.status}) — 원문으로 동기화합니다.`);
       return texts;
     }
+
     const data = await res.json() as { output?: Array<{ content?: Array<{ text?: string }> }> };
     const rawText = data?.output?.[0]?.content?.[0]?.text ?? "";
+    console.log(`[HChat] 응답 raw:`, rawText);
+
     const translated = JSON.parse(rawText) as Record<string, string>;
     const result: Record<string, string> = {};
     for (const [k, v] of Object.entries(texts)) {
       result[k] = typeof translated[k] === "string" ? translated[k] : v;
     }
+    console.log(`[HChat] 번역 결과:`, result);
     return result;
-  } catch {
+  } catch (err) {
+    console.error(`[HChat] 오류:`, err);
     showNotify("H Chat 번역 오류 — 원문으로 동기화합니다.");
     return texts;
   }
