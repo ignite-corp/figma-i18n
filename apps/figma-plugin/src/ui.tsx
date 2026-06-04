@@ -299,6 +299,7 @@ function render() {
     : filtered;
 
   const checkedCount = checkedNodes.size;
+  const scrollTop = document.querySelector(".node-list")?.scrollTop ?? 0;
 
   root.innerHTML = `
     <div class="container">
@@ -342,6 +343,9 @@ function render() {
       </div>
     </div>
   `;
+
+  const nodeList = document.querySelector(".node-list");
+  if (nodeList) nodeList.scrollTop = scrollTop;
 
   bindEvents();
 }

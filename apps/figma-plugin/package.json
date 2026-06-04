@@ -1,6 +1,6 @@
 {
   "name": "figma-plugin",
-  "version": "0.0.14",
+  "version": "0.0.16",
   "private": true,
   "scripts": {
     "dev": "build-figma-plugin --typecheck --watch",
