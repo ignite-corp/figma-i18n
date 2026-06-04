@@ -719,6 +719,15 @@ function bindEvents() {
     }
   });
 
+  // Key 이름 인풋 — 입력 즉시 userActions에 저장 (render() 시 초기화 방지)
+  document.querySelectorAll("[data-key-input]").forEach((el) => {
+    el.addEventListener("input", (e) => {
+      const nodeId = (el as HTMLElement).dataset.keyInput!;
+      const keyName = (e.target as HTMLInputElement).value;
+      userActions.set(nodeId, { action: "create_new", keyName });
+    });
+  });
+
   // Value 수정 인풋
   document.querySelectorAll("[data-value-input]").forEach((el) => {
     el.addEventListener("input", (e) => {
