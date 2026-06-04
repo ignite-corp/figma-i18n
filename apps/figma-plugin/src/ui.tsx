@@ -47,6 +47,8 @@ const ANNOTATION_CATEGORY_IDS = ["14539:0", "12208:0"];
 let selectedProject: "dealer-fo" | "dealer-bo" = "dealer-fo";
 
 const HCHAT_FR_LOCALES = ["fr", "fr_CA"];
+let hChatApiKey = "";
+let showSettings = false;
 
 // ─── Plugin message handling ───
 on("SCAN_RESULT", async (nodes: ExtractedNode[]) => {
@@ -56,6 +58,11 @@ on("SCAN_RESULT", async (nodes: ExtractedNode[]) => {
 
 on("FILE_KEY", (fileKey: string) => {
   figmaFileKey = fileKey;
+  emit("GET_HCHAT_KEY");
+});
+
+on("HCHAT_KEY", (key: string) => {
+  hChatApiKey = key;
 });
 
 on("SELECTION_CHANGED", (_payload: { hasSelection: boolean; count: number }) => {
@@ -162,7 +169,7 @@ function toggleCheckGroup(status: NodeStatus | "all", checked: boolean) {
 // ─── H Chat 번역 (sync-server 경유) ───
 async function callTranslateFr(texts: Record<string, string>): Promise<Record<string, string>> {
   try {
-    return await translateFr(texts);
+    return await translateFr(texts, hChatApiKey || undefined);
   } catch {
     showNotify("H Chat 번역 실패 — 원문으로 동기화합니다.");
     return texts;
@@ -308,7 +315,8 @@ function render() {
       <div class="toolbar">
         <span class="toolbar-title">i18n Sync <span class="toolbar-version">v${VERSION}</span></span>
         <div class="toolbar-actions">
-                    <button class="btn btn-secondary" id="btn-scan">스캔</button>
+                    <button class="btn btn-ghost btn-icon" id="btn-settings" title="H Chat 설정">⚙</button>
+          <button class="btn btn-secondary" id="btn-scan">스캔</button>
           <button class="btn btn-secondary" id="btn-refresh-cache" ${isCacheRefreshing ? "disabled" : ""}>
             ${isCacheRefreshing ? "갱신 중..." : "캐시 갱신"}
           </button>
@@ -318,6 +326,7 @@ function render() {
         </div>
       </div>
 
+      ${showSettings ? renderSettingsPanel() : ""}
 
       <div class="filter-bar">
         ${renderFilterChips()}
@@ -345,6 +354,18 @@ function render() {
   bindEvents();
 }
 
+
+function renderSettingsPanel(): string {
+  return `
+    <div class="settings-panel">
+      <label class="settings-label">H Chat API Key ${hChatApiKey ? "✓ 설정됨" : "(미설정 — FR 번역 비활성)"}</label>
+      <div class="settings-row">
+        <input class="settings-input" type="password" id="hchat-api-key" value="${escapeHtml(hChatApiKey)}" placeholder="Bearer token..." />
+        <button class="btn btn-sm btn-secondary" id="btn-save-hchat-key">저장</button>
+      </div>
+    </div>
+  `;
+}
 
 function renderProjectSelector(): string {
   return `
@@ -498,12 +519,14 @@ function renderEmpty(message: string) {
       <div class="toolbar">
         <span class="toolbar-title">i18n Sync <span class="toolbar-version">v${VERSION}</span></span>
         <div class="toolbar-actions">
-                    <button class="btn btn-secondary" id="btn-refresh-cache" ${isCacheRefreshing ? "disabled" : ""}>
+                    <button class="btn btn-ghost btn-icon" id="btn-settings" title="H Chat 설정">⚙</button>
+          <button class="btn btn-secondary" id="btn-refresh-cache" ${isCacheRefreshing ? "disabled" : ""}>
             ${isCacheRefreshing ? "갱신 중..." : "캐시 갱신"}
           </button>
           <button class="btn btn-primary" id="btn-scan">스캔</button>
         </div>
       </div>
+      ${showSettings ? renderSettingsPanel() : ""}
       <div class="state-view">
         <div class="state-icon">🔍</div>
         <div class="state-message">${message}</div>
@@ -569,6 +592,20 @@ function bindEvents() {
 
   document.getElementById("btn-refresh-cache")?.addEventListener("click", () => {
     handleRefreshCache();
+  });
+
+  document.getElementById("btn-settings")?.addEventListener("click", () => {
+    showSettings = !showSettings;
+    render();
+  });
+
+  document.getElementById("btn-save-hchat-key")?.addEventListener("click", () => {
+    const input = document.getElementById("hchat-api-key") as HTMLInputElement | null;
+    if (!input) return;
+    hChatApiKey = input.value.trim();
+    emit("SET_HCHAT_KEY", { key: hChatApiKey });
+    showNotify(hChatApiKey ? "H Chat API Key 저장됨" : "H Chat API Key 삭제됨");
+    render();
   });
 
   document.querySelectorAll("[data-filter]").forEach((el) => {
