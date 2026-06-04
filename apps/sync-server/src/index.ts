@@ -7,6 +7,7 @@ import { syncRoutes } from "./routes/sync";
 import { cacheRoutes } from "./routes/cache";
 import { keysRoutes } from "./routes/keys";
 import { historyRoutes } from "./routes/history";
+import { translateRoutes } from "./routes/translate";
 import { refreshCache } from "./services/cache";
 
 const config = loadConfig();
@@ -24,6 +25,7 @@ await app.register(syncRoutes, { prefix: "/api" });
 await app.register(cacheRoutes, { prefix: "/api" });
 await app.register(keysRoutes, { prefix: "/api" });
 await app.register(historyRoutes, { prefix: "/api" });
+await app.register(translateRoutes, { prefix: "/api" });
 
 async function refreshAllProjectsOnStart() {
   const projects = getAvailableProjects(config);
