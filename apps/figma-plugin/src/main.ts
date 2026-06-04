@@ -38,15 +38,6 @@ export default function () {
     figma.notify(payload.message);
   });
 
-  on("GET_HCHAT_KEY", async () => {
-    const key = await figma.clientStorage.getAsync("hchat_api_key") as string | undefined;
-    emit("HCHAT_KEY", key ?? "");
-  });
-
-  on("SET_HCHAT_KEY", async (payload: { key: string }) => {
-    await figma.clientStorage.setAsync("hchat_api_key", payload.key);
-  });
-
   on("CLOSE", () => {
     figma.closePlugin();
   });
