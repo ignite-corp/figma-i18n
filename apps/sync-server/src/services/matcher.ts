@@ -7,6 +7,9 @@ import type {
 import { findMatches } from "i18n-matcher";
 import { getCachedKeys } from "./cache";
 import { prisma } from "../lib/prisma";
+import { loadConfig, resolveProjectId } from "../config";
+
+const config = loadConfig();
 
 /** 노드 목록을 매칭하여 결과 반환 */
 export async function matchNodes(
@@ -15,13 +18,15 @@ export async function matchNodes(
   projectId?: string,
 ): Promise<ScanResultNode[]> {
   const cachedKeys = await getCachedKeys(projectId);
+  const resolvedProjectId = resolveProjectId(config, projectId);
   const results: ScanResultNode[] = [];
 
-  // 기존 매핑 정보 한 번에 조회
+  // 기존 매핑 정보 한 번에 조회 (프로젝트 단위로 격리)
   const existingMappings = await prisma.figmaKeyMapping.findMany({
     where: {
       figmaFileId,
       nodeId: { in: nodes.map((n) => n.nodeId) },
+      projectId: resolvedProjectId,
     },
   });
 
