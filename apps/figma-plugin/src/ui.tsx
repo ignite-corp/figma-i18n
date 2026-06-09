@@ -486,7 +486,7 @@ function renderNewKeyInput(result: ScanResultNode): string {
 
   return `
     <div class="key-input-group">
-      <input class="key-input" type="text" placeholder="domain.section.element.modifier" value="${escapeHtml(currentKey)}" data-key-input="${result.nodeId}" />
+      <input class="key-input" type="text" placeholder="DOMAIN_SECTION_ELEMENT_MODIFIER" value="${escapeHtml(currentKey)}" data-key-input="${result.nodeId}" />
     </div>
     <div class="value-input-group">
       <label class="value-label">Value</label>

@@ -85,7 +85,7 @@ async function processSingleItem(
       if (!item.keyName) throw new Error("keyName is required for create_new");
 
       // value가 명시적으로 지정된 경우 해당 값 사용, 없으면 Figma 텍스트 사용
-      const sourceText = item.value ?? item.text;
+      const sourceText = (item.value ?? item.text).replace(/\n/g, "\\n");
 
       const translations = buildTranslations(
         lokalise.baseLanguage, targetLanguages, sourceText, item.frTranslations,
@@ -160,7 +160,7 @@ async function processSingleItem(
     case "link_existing": {
       if (!item.keyName) throw new Error("keyName is required for link_existing");
 
-      const sourceText = item.value ?? item.text;
+      const sourceText = (item.value ?? item.text).replace(/\n/g, "\\n");
 
       // DB: 매핑 저장
       await prisma.figmaKeyMapping.upsert({
@@ -194,7 +194,7 @@ async function processSingleItem(
     case "update_source": {
       if (!item.keyName) throw new Error("keyName is required for update_source");
 
-      const sourceText = item.value ?? item.text;
+      const sourceText = (item.value ?? item.text).replace(/\n/g, "\\n");
 
       // Lokalise key ID 찾기 (캐시에서)
       const cached = await prisma.lokaliseKeyCache.findFirst({

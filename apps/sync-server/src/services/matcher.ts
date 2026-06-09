@@ -93,13 +93,13 @@ function generateSuggestedKey(parentPath: string): string {
     .filter(Boolean)
     .map((s) =>
       s
-        .toLowerCase()
-        .replace(/\s+/g, "-")
-        .replace(/[^a-z0-9가-힣-]/g, ""),
+        .toUpperCase()
+        .replace(/\s+/g, "_")
+        .replace(/[^A-Z0-9가-힣_]/g, ""),
     )
     .slice(0, 3); // 최대 3 세그먼트
 
-  if (segments.length === 0) return "untitled.text.label";
+  if (segments.length === 0) return "UNTITLED_TEXT_LABEL";
 
-  return [...segments, "label"].join(".");
+  return [...segments, "LABEL"].join("_");
 }
