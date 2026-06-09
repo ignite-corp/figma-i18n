@@ -450,7 +450,7 @@ function renderExistingMapping(result: ScanResultNode): string {
       ${(result.status === "changed" || result.status === "matched") && !isDeleteAction
         ? `<div class="value-input-group">
             <label class="value-label">Value</label>
-            <input class="value-input" type="text" value="${escapeHtml(currentValue)}" data-value-input="${result.nodeId}" placeholder="번역 텍스트" />
+            <textarea class="value-input" data-value-input="${result.nodeId}" placeholder="번역 텍스트" rows="2">${escapeHtml(currentValue)}</textarea>
           </div>`
         : ""}
     </div>
@@ -490,7 +490,7 @@ function renderNewKeyInput(result: ScanResultNode): string {
     </div>
     <div class="value-input-group">
       <label class="value-label">Value</label>
-      <input class="value-input" type="text" value="${escapeHtml(currentValue)}" data-value-input="${result.nodeId}" placeholder="번역 텍스트" />
+      <textarea class="value-input" data-value-input="${result.nodeId}" placeholder="번역 텍스트" rows="2">${escapeHtml(currentValue)}</textarea>
     </div>
   `;
 }

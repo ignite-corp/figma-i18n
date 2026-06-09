@@ -510,8 +510,8 @@ body {
 
 .value-input {
   flex: 1;
-  height: 26px;
-  padding: 0 8px;
+  min-height: 48px;
+  padding: 5px 8px;
   border: 1px solid #E0E0E0;
   border-radius: 5px;
   font-size: 11px;
@@ -520,6 +520,8 @@ body {
   outline: none;
   font-family: inherit;
   transition: all 0.12s;
+  resize: vertical;
+  line-height: 1.5;
 }
 
 .value-input:focus {
