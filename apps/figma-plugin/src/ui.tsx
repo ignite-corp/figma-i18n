@@ -450,7 +450,7 @@ function renderExistingMapping(result: ScanResultNode): string {
       ${(result.status === "changed" || result.status === "matched") && !isDeleteAction
         ? `<div class="value-input-group">
             <label class="value-label">Value</label>
-            <textarea class="value-input" data-value-input="${result.nodeId}" placeholder="번역 텍스트" rows="2">${escapeHtml(currentValue)}</textarea>
+            <textarea class="value-input" data-value-input="${result.nodeId}" placeholder="번역 텍스트" rows="2">${escapeHtml(currentValue.replace(/\\n/g, "\n"))}</textarea>
           </div>`
         : ""}
     </div>
@@ -490,7 +490,7 @@ function renderNewKeyInput(result: ScanResultNode): string {
     </div>
     <div class="value-input-group">
       <label class="value-label">Value</label>
-      <textarea class="value-input" data-value-input="${result.nodeId}" placeholder="번역 텍스트" rows="2">${escapeHtml(currentValue)}</textarea>
+      <textarea class="value-input" data-value-input="${result.nodeId}" placeholder="번역 텍스트" rows="2">${escapeHtml(currentValue.replace(/\\n/g, "\n"))}</textarea>
     </div>
   `;
 }
@@ -661,11 +661,11 @@ function bindEvents() {
     });
   });
 
-  // Value 수정 인풋
+  // Value 수정 인풋 (실제 개행 → \n 리터럴로 저장)
   document.querySelectorAll("[data-value-input]").forEach((el) => {
     el.addEventListener("input", (e) => {
       const nodeId = (el as HTMLElement).dataset.valueInput!;
-      const value = (e.target as HTMLInputElement).value;
+      const value = (e.target as HTMLInputElement).value.replace(/\n/g, "\\n");
       userValues.set(nodeId, value);
     });
   });
