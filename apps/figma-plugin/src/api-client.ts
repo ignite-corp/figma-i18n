@@ -74,12 +74,12 @@ export async function refreshCache(projectId?: string): Promise<CacheRefreshResp
 /** EN → FR 번역 (sync-server 경유) */
 export async function translateFr(
   texts: Record<string, string>,
-): Promise<Record<string, string>> {
-  const res = await request<{ translations: Record<string, string> }>("/api/translate", {
+): Promise<{ translations: Record<string, string>; hasErrors: boolean }> {
+  const res = await request<{ translations: Record<string, string>; hasErrors: boolean }>("/api/translate", {
     method: "POST",
     body: JSON.stringify({ texts }),
   });
-  return res.translations;
+  return { translations: res.translations, hasErrors: res.hasErrors ?? false };
 }
 
 /** Key 검색 */

@@ -23,6 +23,7 @@ let extractedNodes: ExtractedNode[] = [];
 let scanResults: ScanResultNode[] = [];
 let activeFilter: NodeStatus | "all" = "all";
 let isLoading = false;
+let isSyncing = false;
 let cacheStatus: CacheStatusResponse | null = null;
 let isCacheRefreshing = false;
 
@@ -162,7 +163,11 @@ function toggleCheckGroup(status: NodeStatus | "all", checked: boolean) {
 // ─── FR 번역 (sync-server → LibreTranslate 경유) ───
 async function callTranslateFr(texts: Record<string, string>): Promise<Record<string, string>> {
   try {
-    return await translateFr(texts);
+    const result = await translateFr(texts);
+    if (result.hasErrors) {
+      showNotify("일부 텍스트 FR 번역 실패 — 원문으로 동기화합니다.");
+    }
+    return result.translations;
   } catch {
     showNotify("FR 번역 실패 — 원문으로 동기화합니다.");
     return texts;
@@ -171,6 +176,9 @@ async function callTranslateFr(texts: Record<string, string>): Promise<Record<st
 
 // ─── Sync logic ───
 async function handleSync() {
+  if (isSyncing) return;
+  isSyncing = true;
+  render();
   const items: SyncItem[] = [];
   const pluginDataUpdates: Array<{ nodeId: string; data: I18nPluginData }> = [];
 
@@ -206,6 +214,7 @@ async function handleSync() {
 
   if (items.length === 0) {
     showNotify("동기화할 항목이 없습니다. 체크된 항목을 확인해주세요.");
+    isSyncing = false;
     return;
   }
 
@@ -273,6 +282,7 @@ async function handleSync() {
   } catch (err) {
     showNotify(`동기화 실패: ${err instanceof Error ? err.message : err}`);
   } finally {
+    isSyncing = false;
     setLoading(false);
   }
 }
@@ -313,7 +323,7 @@ function render() {
           <button class="btn btn-secondary" id="btn-refresh-cache" ${isCacheRefreshing ? "disabled" : ""}>
             ${isCacheRefreshing ? "갱신 중..." : "캐시 갱신"}
           </button>
-          <button class="btn btn-primary" id="btn-sync" ${checkedCount === 0 ? "disabled" : ""}>
+          <button class="btn btn-primary" id="btn-sync" ${checkedCount === 0 || isSyncing ? "disabled" : ""}>
             동기화${checkedCount > 0 ? ` (${checkedCount})` : ""}
           </button>
         </div>
