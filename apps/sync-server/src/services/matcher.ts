@@ -95,8 +95,9 @@ function generateSuggestedKey(parentPath: string): string {
       s
         .toUpperCase()
         .replace(/\s+/g, "_")
-        .replace(/[^A-Z0-9가-힣_]/g, ""),
+        .replace(/[^A-Z0-9_]/g, ""),
     )
+    .filter(Boolean) // 한글만으로 된 세그먼트(빈 문자열) 제거
     .slice(0, 3); // 최대 3 세그먼트
 
   if (segments.length === 0) return "UNTITLED_TEXT_LABEL";
