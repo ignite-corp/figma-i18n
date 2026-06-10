@@ -13,12 +13,12 @@ export const translateRoutes: FastifyPluginAsync = async (app) => {
   app.post("/translate", async (req, reply) => {
     const { texts } = bodySchema.parse(req.body);
 
-    const translations = await translateEnToFr(
+    const { translations, hasErrors } = await translateEnToFr(
       texts,
       config.LIBRETRANSLATE_URL,
       config.LIBRETRANSLATE_API_KEY,
     );
 
-    return reply.send({ translations });
+    return reply.send({ translations, hasErrors });
   });
 };
