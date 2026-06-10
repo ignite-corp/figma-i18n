@@ -260,6 +260,73 @@ EN은 `sourceText`에 직접 replace가 적용되어 이중 이스케이프 발�
 
 ---
 
+### 8. H Chat → LibreTranslate 번역 엔진 교체 및 Railway Docker 배포
+
+**배경**: EN → FR 자동 번역을 위해 HMG 사내 H Chat API를 사용했으나 두 가지 문제가 연달아 발생.
+
+#### 문제 ①: 플러그인에서 직접 호출 → `origin: null` 403
+
+위 이슈 2번과 동일. 서버 프록시로 우회했더니 이번엔 서버 문제 발생.
+
+#### 문제 ②: Railway 서버에서 H Chat API DNS 조회 실패
+
+```
+Error: getaddrinfo ENOTFOUND internal-apigw-kr.hmg-corp.io
+```
+
+H Chat API 엔드포인트(`internal-apigw-kr.hmg-corp.io`)는 HMG 사내 VPN에서만 접근 가능한 내부 도메인.  
+Railway는 외부 클라우드 서버라 DNS 조회 자체가 불가.
+
+**해결**: 오픈소스 번역 엔진 [LibreTranslate](https://github.com/LibreTranslate/LibreTranslate)를 Railway에 직접 배포.
+
+```
+Figma Plugin → sync-server → LibreTranslate (Railway 내부망)
+                                     ↑
+                           Docker 컨테이너, 외부 의존성 없음
+```
+
+#### Railway Docker 배포 설정
+
+Railway 동일 프로젝트에 Docker 서비스로 추가:
+
+- **Image**: `libretranslate/libretranslate`
+- **Private Networking 활성화** → 내부 도메인 `libretranslate.railway.internal:5000`으로 통신
+
+```
+# sync-server 환경변수
+LIBRETRANSLATE_URL=http://libretranslate.railway.internal:5000
+```
+
+#### 문제 ③: `LT_LOAD_ONLY=en,fr` 환경변수 미적용
+
+```
+Loaded support for 49 languages (98 models total)!
+```
+
+`LT_LOAD_ONLY=en,fr`로 EN/FR 모델만 로드하도록 설정했지만 **전체 49개 언어 모델이 로드**됨.  
+→ 메모리 사용량 2~4GB 급증 → Railway 비용 폭증.
+
+시작 커맨드 직접 지정으로 해결:
+
+```
+# Railway 서비스 Start Command 직접 설정
+libretranslate --load-only en,fr
+```
+
+#### 문제 ④: 첫 배포 시 `ECONNREFUSED` (모델 다운로드 중)
+
+```
+AggregateError [ECONNREFUSED]
+```
+
+LibreTranslate는 첫 시작 시 언어 모델을 다운로드하는 동안 포트를 열지 않음.  
+→ sync-server가 번역 요청을 보내면 연결 거부.
+
+**해결**: 자동 재시도(`restartPolicyType = "on_failure"`) + 헬스체크 타임아웃 120초로 설정.  
+모델 다운로드 완료(`Running on http://0.0.0.0:5000` 로그) 후 정상 동작.
+
+---
+
 ## 문의
 
 플러그인 관련 문의: **Service Planning Team**  
