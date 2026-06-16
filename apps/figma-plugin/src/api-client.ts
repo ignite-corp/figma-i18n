@@ -8,7 +8,7 @@ import type {
   KeySearchResponse,
 } from "shared-types";
 
-let serverUrl = "https://sync-server-production-f593.up.railway.app";
+let serverUrl = "https://figma-i18n.onrender.com";
 
 export function setServerUrl(url: string) {
   serverUrl = url.replace(/\/+$/, "");
