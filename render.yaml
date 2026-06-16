@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: sync-server
+    runtime: node
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter sync-server exec prisma generate
+    startCommand: pnpm --filter sync-server exec prisma db push --skip-generate && pnpm --filter sync-server exec tsx src/index.ts
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: LOKALISE_API_TOKEN
+        sync: false
+      - key: LOKALISE_PROJECT_ID
+        sync: false
+      - key: LOKALISE_BASE_LANGUAGE
+        value: en
+      - key: LOKALISE_TARGET_LANGUAGES
+        value: en,en_CA,fr_CA
+      - key: LOKALISE_PROJECT_DEALER_FO
+        sync: false
+      - key: LOKALISE_PROJECT_DEALER_BO
+        sync: false
+      - key: DEEPL_API_KEY
+        sync: false
+      - key: HOST
+        value: "0.0.0.0"
+      - key: LOG_LEVEL
+        value: info
+      - key: CORS_ORIGIN
+        value: "*"

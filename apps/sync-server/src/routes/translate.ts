@@ -15,8 +15,7 @@ export const translateRoutes: FastifyPluginAsync = async (app) => {
 
     const { translations, hasErrors } = await translateEnToFr(
       texts,
-      config.LIBRETRANSLATE_URL,
-      config.LIBRETRANSLATE_API_KEY,
+      config.DEEPL_API_KEY,
     );
 
     return reply.send({ translations, hasErrors });

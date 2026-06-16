@@ -13,8 +13,7 @@ const envSchema = z.object({
   HOST: z.string().default("0.0.0.0"),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   CORS_ORIGIN: z.string().default("*"),
-  LIBRETRANSLATE_URL: z.string().default("https://libretranslate.com"),
-  LIBRETRANSLATE_API_KEY: z.string().optional(),
+  DEEPL_API_KEY: z.string().min(1),
 });
 
 export type Env = z.infer<typeof envSchema>;
