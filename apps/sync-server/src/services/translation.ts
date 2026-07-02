@@ -4,6 +4,40 @@ type DeepLResponse = {
   translations: Array<{ text: string }>;
 };
 
+// {{variable}} 안의 내용은 번역되면 안 되므로 DeepL XML 태그 핸들링으로 보호한다.
+const IGNORE_TAG = "x";
+
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function unescapeXml(text: string): string {
+  return text
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+/** {{...}} 변수를 ignore 태그로 감싸 번역에서 제외한다. */
+function protectVariables(text: string): string {
+  return escapeXml(text).replace(
+    /\{\{.*?\}\}/g,
+    (match) => `<${IGNORE_TAG}>${match}</${IGNORE_TAG}>`,
+  );
+}
+
+/** ignore 태그를 제거하고 XML 이스케이프를 원복한다. */
+function restoreVariables(text: string): string {
+  const stripped = text.replace(
+    new RegExp(`</?${IGNORE_TAG}\\s*/?>`, "g"),
+    "",
+  );
+  return unescapeXml(stripped);
+}
+
 export async function translateEnToFr(
   texts: Record<string, string>,
   deeplApiKey: string,
@@ -28,9 +62,12 @@ export async function translateEnToFr(
         "Authorization": `DeepL-Auth-Key ${deeplApiKey}`,
       },
       body: JSON.stringify({
-        text: entries.map(([, text]) => text),
+        text: entries.map(([, text]) => protectVariables(text)),
         source_lang: "EN",
         target_lang: "FR",
+        tag_handling: "xml",
+        ignore_tags: [IGNORE_TAG],
+        outline_detection: false,
       }),
     });
 
@@ -44,7 +81,9 @@ export async function translateEnToFr(
     let hasErrors = false;
     const translations: Record<string, string> = {};
     entries.forEach(([key, originalText], i) => {
-      const translated = data.translations[i]?.text;
+      const rawTranslated = data.translations[i]?.text;
+      const translated =
+        rawTranslated !== undefined ? restoreVariables(rawTranslated) : undefined;
       if (translated && translated !== originalText) {
         translations[key] = translated;
       } else {
