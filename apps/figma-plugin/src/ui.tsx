@@ -89,8 +89,8 @@ let isBulkApplying = false;
 
 const ANNOTATION_CATEGORY_IDS = ["14539:0", "12208:0"];
 
-// Lokalise 프로젝트 선택 (FO / BO)
-let selectedProject: "dealer-fo" | "dealer-bo" = "dealer-fo";
+// Lokalise 프로젝트 선택 (FO / BO / GDPS)
+let selectedProject: "dealer-fo" | "dealer-bo" | "dealer-gdps" = "dealer-fo";
 
 // 신규 key 생성 시 붙일 Lokalise 태그 (쉼표 구분 입력)
 let tagInput = "";
@@ -633,6 +633,7 @@ function renderProjectSelector(): string {
       <div class="project-toggle">
         <button class="project-tab ${selectedProject === "dealer-fo" ? "active" : ""}" data-project="dealer-fo">FO</button>
         <button class="project-tab ${selectedProject === "dealer-bo" ? "active" : ""}" data-project="dealer-bo">BO</button>
+        <button class="project-tab ${selectedProject === "dealer-gdps" ? "active" : ""}" data-project="dealer-gdps">GDPS</button>
       </div>
     </div>
   `;
@@ -777,7 +778,7 @@ function renderNodeItem(result: ScanResultNode): string {
 
       ${result.existingMapping ? renderExistingMapping(result) : ""}
       ${result.candidates.length > 0 ? renderCandidates(result) : ""}
-      ${result.status === "new" || result.status === "candidate" ? renderNewKeyInput(result) : ""}
+      ${result.status === "new" || result.status === "candidate" || userActions.get(result.nodeId)?.action === "create_new" ? renderNewKeyInput(result) : ""}
     </div>
   `;
 }
@@ -786,7 +787,9 @@ function renderExistingMapping(result: ScanResultNode): string {
   if (!result.existingMapping) return "";
   const editedValue = userValues.get(result.nodeId);
   const currentValue = editedValue !== undefined ? editedValue : result.text;
-  const isDeleteAction = userActions.get(result.nodeId)?.action === "delete_key";
+  const currentAction = userActions.get(result.nodeId)?.action;
+  const isDeleteAction = currentAction === "delete_key";
+  const isCreateNewAction = currentAction === "create_new";
 
   return `
     <div class="mapping-info">
@@ -795,11 +798,16 @@ function renderExistingMapping(result: ScanResultNode): string {
         <button class="btn btn-sm btn-danger" data-action="delete" data-node-id="${result.nodeId}" data-key="${escapeHtml(result.existingMapping.keyName)}">
           ${isDeleteAction ? "삭제 취소" : "삭제"}
         </button>
+        ${!isDeleteAction
+          ? `<button class="btn btn-sm btn-secondary" data-action="register-new" data-node-id="${result.nodeId}">
+              ${isCreateNewAction ? "새 키 취소" : "새 키로 등록"}
+            </button>`
+          : ""}
       </div>
       ${result.status === "changed"
         ? `<div class="changed-diff">이전: "${escapeHtml(result.existingMapping.previousText ?? "")}" → 현재: "${escapeHtml(result.existingMapping.currentText ?? "")}"</div>`
         : ""}
-      ${(result.status === "changed" || result.status === "matched") && !isDeleteAction
+      ${(result.status === "changed" || result.status === "matched") && !isDeleteAction && !isCreateNewAction
         ? `<div class="value-input-group">
             <label class="value-label">Value</label>
             <textarea class="value-input" data-value-input="${result.nodeId}" placeholder="번역 텍스트" rows="2">${escapeHtml(toDisplayValue(currentValue))}</textarea>
@@ -1015,7 +1023,7 @@ function bindEvents() {
 
   document.querySelectorAll("[data-project]").forEach((el) => {
     el.addEventListener("click", () => {
-      selectedProject = (el as HTMLElement).dataset.project as "dealer-fo" | "dealer-bo";
+      selectedProject = (el as HTMLElement).dataset.project as "dealer-fo" | "dealer-bo" | "dealer-gdps";
       render();
     });
   });
@@ -1086,6 +1094,21 @@ function bindScanEvents() {
       const key = (el as HTMLElement).dataset.key!;
       userActions.set(nodeId, { action: "link_existing", keyName: key });
       checkedNodes.add(nodeId);
+      render();
+    });
+  });
+
+  // 새 키로 등록 버튼 (matched/changed 노드를 create_new로 전환)
+  document.querySelectorAll("[data-action='register-new']").forEach((el) => {
+    el.addEventListener("click", () => {
+      const nodeId = (el as HTMLElement).dataset.nodeId!;
+      if (userActions.get(nodeId)?.action === "create_new") {
+        userActions.delete(nodeId);
+        checkedNodes.delete(nodeId);
+      } else {
+        userActions.set(nodeId, { action: "create_new", keyName: "" });
+        checkedNodes.add(nodeId);
+      }
       render();
     });
   });

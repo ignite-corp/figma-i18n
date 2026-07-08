@@ -57,6 +57,7 @@ LOKALISE_BASE_LANGUAGE="ko"
 # 멀티 프로젝트 (선택)
 LOKALISE_PROJECT_DEALER_FO="dealer_fo_project_id"
 LOKALISE_PROJECT_DEALER_BO="dealer_bo_project_id"
+LOKALISE_PROJECT_DEALER_GDPS="dealer_gdps_project_id"
 
 # 서버
 PORT=3001
@@ -262,6 +263,7 @@ Lokalise에 값이 반영되면 Figma 캔버스의 텍스트도 같은 값으로
 ```env
 LOKALISE_PROJECT_DEALER_FO="xxxxxxxx"
 LOKALISE_PROJECT_DEALER_BO="yyyyyyyy"
+LOKALISE_PROJECT_DEALER_GDPS="zzzzzzzz"
 ```
 
 스캔·동기화 시 `projectId` 파라미터로 대상 프로젝트를 지정할 수 있습니다.

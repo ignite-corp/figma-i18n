@@ -119,7 +119,9 @@ curl http://localhost:3001/api/projects
 {
   "projects": [
     { "id": "default", "name": "Default" },
-    { "id": "dealer-fo", "name": "Dealer FO" }
+    { "id": "dealer-fo", "name": "Dealer FO" },
+    { "id": "dealer-bo", "name": "Dealer BO" },
+    { "id": "dealer-gdps", "name": "Dealer GDPS" }
   ]
 }
 ```

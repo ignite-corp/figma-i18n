@@ -22,6 +22,8 @@ services:
         sync: false
       - key: LOKALISE_PROJECT_DEALER_BO
         sync: false
+      - key: LOKALISE_PROJECT_DEALER_GDPS
+        sync: false
       - key: DEEPL_API_KEY
         sync: false
       - key: HOST

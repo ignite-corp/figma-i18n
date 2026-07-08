@@ -9,6 +9,7 @@ const envSchema = z.object({
   LOKALISE_TARGET_LANGUAGES: z.string().default("en,en_CA,fr_CA"),
   LOKALISE_PROJECT_DEALER_FO: z.string().optional(),
   LOKALISE_PROJECT_DEALER_BO: z.string().optional(),
+  LOKALISE_PROJECT_DEALER_GDPS: z.string().optional(),
   PORT: z.coerce.number().default(3001),
   HOST: z.string().default("0.0.0.0"),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
@@ -39,6 +40,9 @@ export function getAvailableProjects(config: Env): Array<{ id: string; name: str
   }
   if (config.LOKALISE_PROJECT_DEALER_BO) {
     projects.push({ id: config.LOKALISE_PROJECT_DEALER_BO, name: "dealer-bo" });
+  }
+  if (config.LOKALISE_PROJECT_DEALER_GDPS) {
+    projects.push({ id: config.LOKALISE_PROJECT_DEALER_GDPS, name: "dealer-gdps" });
   }
 
   // 기본 프로젝트가 목록에 없으면 추가
