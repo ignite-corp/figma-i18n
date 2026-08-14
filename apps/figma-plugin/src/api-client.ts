@@ -6,6 +6,13 @@ import type {
   CacheStatusResponse,
   CacheRefreshResponse,
   KeySearchResponse,
+  KeyFindResponse,
+  KeyLookupRequest,
+  KeyLookupResponse,
+  KeyUpdateRequest,
+  KeyUpdateResponse,
+  BulkKeysRequest,
+  BulkKeysResponse,
 } from "shared-types";
 
 let serverUrl = "https://figma-i18n.onrender.com";
@@ -90,4 +97,39 @@ export async function searchKeys(
   return request<KeySearchResponse>(
     `/api/keys/search?q=${encodeURIComponent(query)}&limit=${limit}`,
   );
+}
+
+/** key 이름 / value 부분 일치 검색 */
+export async function findKeys(
+  query: string,
+  projectId: string,
+  limit = 30,
+): Promise<KeyFindResponse> {
+  return request<KeyFindResponse>(
+    `/api/keys/find?q=${encodeURIComponent(query)}&limit=${limit}&projectId=${encodeURIComponent(projectId)}`,
+  );
+}
+
+/** key 이름 목록으로 존재 여부/현재 값 조회 */
+export async function lookupKeys(body: KeyLookupRequest): Promise<KeyLookupResponse> {
+  return request<KeyLookupResponse>("/api/keys/lookup", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** 단일 key value 업데이트 */
+export async function updateKeyValue(body: KeyUpdateRequest): Promise<KeyUpdateResponse> {
+  return request<KeyUpdateResponse>("/api/keys/update", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** JSON 대량 생성/업데이트 */
+export async function bulkUpsertKeys(body: BulkKeysRequest): Promise<BulkKeysResponse> {
+  return request<BulkKeysResponse>("/api/keys/bulk", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
