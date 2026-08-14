@@ -439,6 +439,38 @@ body {
   background: #E8F2FD;
 }
 
+.node-item--conflict {
+  background: #FFFBEB;
+}
+
+.node-item--conflict::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #D97706;
+  border-radius: 0 1px 1px 0;
+}
+
+.conflict-notice {
+  margin: 4px 0;
+  padding: 6px 8px;
+  border-radius: 5px;
+  background: #FEF3C7;
+  border: 1px solid #FDE68A;
+  font-size: 10px;
+  color: #92400E;
+  line-height: 1.5;
+}
+
+.conflict-current {
+  margin: 3px 0 5px;
+  color: #78350F;
+  word-break: break-word;
+}
+
 .node-item-header {
   display: flex;
   align-items: center;

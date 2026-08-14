@@ -26,9 +26,15 @@ export interface KeyUpdateRequest {
   projectId?: string;
   figmaFileId?: string;
   triggeredBy?: string;
+  /** 사용자가 화면에서 보고 있던 값. Lokalise 최신 값과 다르면 충돌로 처리 */
+  expectedValue?: string;
+  /** 충돌을 무시하고 덮어쓰기 */
+  force?: boolean;
 }
 
 export interface KeyUpdateResponse {
+  /** conflict인 경우 아무것도 쓰지 않았으며 key.baseValue가 Lokalise 최신 값 */
+  status: "updated" | "conflict";
   key: KeyEntry;
 }
 
@@ -38,6 +44,8 @@ export interface BulkKeyItem {
   keyName: string;
   value: string;
   mode: BulkKeyMode;
+  /** 미리보기 시점에 확인한 Lokalise 값. 반영 직전 값이 달라졌으면 충돌로 처리 */
+  expectedValue?: string;
 }
 
 export interface BulkKeysRequest {
@@ -52,6 +60,8 @@ export interface BulkKeyResult {
   mode: BulkKeyMode;
   success: boolean;
   error?: string;
+  /** Lokalise 최신 상태와 어긋나 건너뛴 항목 */
+  conflict?: boolean;
 }
 
 export interface BulkKeysResponse {

@@ -176,7 +176,7 @@ Key 이름 규칙: `domain.section.element.modifier` (예: `vehicle.card.price.l
 Figma 스캔과 무관하게 Lokalise에 등록된 key를 직접 수정할 때 사용합니다.
 
 1. key 이름 또는 값의 일부를 입력하고 **[검색]** (또는 Enter)
-2. 결과 항목의 value를 수정한 뒤 **[저장]**
+2. 결과 항목의 value를 수정한 뒤 **[저장]** — 그 사이 Lokalise에서 수정된 key라면 저장이 보류되고 최신 값이 표시됩니다
 
 저장 시 프로젝트의 모든 언어에 해당 값이 반영되며, base가 EN인 프로젝트의 FR 계열 언어는 DeepL 자동 번역이 적용됩니다 (동기화와 동일한 규칙).
 
@@ -200,10 +200,26 @@ Figma 스캔과 무관하게 Lokalise에 등록된 key를 직접 수정할 때 �
 | `POST` | `/api/cache/refresh` | Lokalise key 캐시 갱신 |
 | `GET` | `/api/cache/status` | 캐시 상태 조회 |
 | `GET` | `/api/projects` | 사용 가능한 Lokalise 프로젝트 목록 |
-| `GET` | `/api/keys/find` | key 이름·값 부분 일치 검색 |
-| `POST` | `/api/keys/lookup` | key 이름 목록의 존재 여부·현재 값 조회 |
-| `POST` | `/api/keys/update` | 특정 key의 value 업데이트 |
-| `POST` | `/api/keys/bulk` | JSON 기반 key 대량 생성·업데이트 |
+| `GET` | `/api/keys/find` | key 이름·값 부분 일치 검색 (캐시 조회) |
+| `POST` | `/api/keys/lookup` | key 이름 목록의 Lokalise 최신 값 조회 + 캐시 반영 |
+| `POST` | `/api/keys/update` | 특정 key의 value 업데이트 (충돌 감지) |
+| `POST` | `/api/keys/bulk` | JSON 기반 key 대량 생성·업데이트 (충돌 감지) |
+
+---
+
+## 캐시와 Lokalise 동기화
+
+검색 속도를 위해 Lokalise key를 `lokalise_key_cache` 테이블에 캐싱합니다. 캐시 전체 갱신은 **서버 시작 시**와 **[캐시 갱신] 버튼**(`POST /api/cache/refresh`) 두 경우에만 일어납니다. 따라서 Lokalise에서 직접 수정한 내용은 갱신 전까지 플러그인에 반영되지 않습니다.
+
+캐시가 오래되어 최신 값을 덮어쓰는 사고를 막기 위해 **쓰기 직전 해당 key만 Lokalise에서 재조회해 충돌을 감지**합니다.
+
+| 기능 | 동작 |
+|---|---|
+| 키 검색 탭 [저장] | 화면에 보고 있던 값과 Lokalise 최신 값이 다르면 저장을 보류하고 최신 값을 보여줍니다. [덮어쓰기]로 강제 저장하거나 [최신 값 가져오기]로 되돌릴 수 있습니다 |
+| JSON 추가 탭 [미리보기] | 붙여넣은 key들의 Lokalise 최신 값을 조회해 분류하고 캐시도 함께 갱신합니다 |
+| JSON 추가 탭 [반영] | 미리보기 이후 값이 바뀐 항목, 이미 존재하는 신규 key는 건너뛰고 사유를 표시합니다 |
+
+> Render 무료 플랜은 15분간 요청이 없으면 인스턴스를 중지시켜 다음 요청이 10초 이상 걸립니다. 이를 막기 위해 서버가 10분마다 자기 자신의 `/health`를 호출합니다 (`RENDER_EXTERNAL_URL`이 있을 때만 동작). 인스턴스가 계속 살아있으면 시작 시 전체 갱신도 그만큼 덜 일어나므로, Lokalise를 직접 크게 수정한 뒤에는 [캐시 갱신]을 눌러주세요.
 
 ---
 

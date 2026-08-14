@@ -28,6 +28,8 @@ declare const styles: {
   readonly "changed-diff": string;
   readonly "checkbox-label": string;
   readonly "chip-count": string;
+  readonly "conflict-current": string;
+  readonly "conflict-notice": string;
   readonly "container": string;
   readonly "error": string;
   readonly "filter-bar": string;
@@ -43,6 +45,7 @@ declare const styles: {
   readonly "node-checkbox": string;
   readonly "node-item": string;
   readonly "node-item--checked": string;
+  readonly "node-item--conflict": string;
   readonly "node-item-header": string;
   readonly "node-list": string;
   readonly "node-path": string;

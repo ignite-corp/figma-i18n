@@ -1,6 +1,7 @@
 import { RateLimiter } from "./rate-limiter";
 import type {
   LokaliseKey,
+  LokaliseKeyResponse,
   LokaliseKeysResponse,
   LokaliseCreateKeyPayload,
   LokaliseUpdateKeyPayload,
@@ -113,6 +114,14 @@ export class LokaliseClient {
       `/projects/${this.projectId}/languages`,
     );
     return response.languages;
+  }
+
+  /** key 단건 조회 (translations 포함) */
+  async getKey(keyId: number): Promise<LokaliseKey> {
+    const response = await this.request<LokaliseKeyResponse>(
+      `/projects/${this.projectId}/keys/${keyId}?include_translations=1`,
+    );
+    return response.key;
   }
 
   /** key 이름으로 검색 */

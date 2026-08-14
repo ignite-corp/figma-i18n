@@ -33,6 +33,8 @@ const updateBodySchema = z.object({
   projectId: z.string().optional(),
   figmaFileId: z.string().optional(),
   triggeredBy: z.string().optional(),
+  expectedValue: z.string().optional(),
+  force: z.boolean().optional(),
 });
 
 const bulkBodySchema = z.object({
@@ -42,6 +44,7 @@ const bulkBodySchema = z.object({
         keyName: z.string().min(1),
         value: z.string(),
         mode: z.enum(["create", "update"]),
+        expectedValue: z.string().optional(),
       }),
     )
     .min(1)
@@ -90,15 +93,17 @@ export const keysRoutes: FastifyPluginAsync = async (app) => {
   /** 단일 key value 업데이트 */
   app.post("/keys/update", async (req, reply) => {
     const body = updateBodySchema.parse(req.body);
-    const key = await updateKeyValue({
+    const result = await updateKeyValue({
       keyName: body.keyName,
       value: body.value,
       projectKey: body.projectId,
       figmaFileId: body.figmaFileId,
       triggeredBy: body.triggeredBy,
+      expectedValue: body.expectedValue,
+      force: body.force,
     });
 
-    const response: KeyUpdateResponse = { key };
+    const response: KeyUpdateResponse = result;
     return reply.send(response);
   });
 

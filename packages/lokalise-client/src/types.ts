@@ -28,6 +28,11 @@ export interface LokaliseKeysResponse {
   errors?: Array<{ message: string; code: number }>;
 }
 
+export interface LokaliseKeyResponse {
+  project_id: string;
+  key: LokaliseKey;
+}
+
 export interface LokaliseCreateKeyPayload {
   keys: Array<{
     key_name: string;

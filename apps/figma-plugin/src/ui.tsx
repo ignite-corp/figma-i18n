@@ -65,6 +65,10 @@ let keyTotal = 0;
 let keySearched = false;
 let isKeySearching = false;
 let savingKeyName: string | null = null;
+// 사용자가 수정 중인 값 (keyName → 저장 형식 value)
+const keyEdits: Map<string, string> = new Map();
+// Lokalise에서 이미 변경되어 저장이 보류된 key
+const keyConflicts: Set<string> = new Set();
 
 // ─── JSON 대량 추가 탭 state ───
 type BulkStatus = "new" | "changed" | "same";
@@ -342,6 +346,8 @@ async function handleKeySearch() {
   if (isKeySearching) return;
 
   isKeySearching = true;
+  keyEdits.clear();
+  keyConflicts.clear();
   render();
 
   try {
@@ -360,7 +366,7 @@ async function handleKeySearch() {
   }
 }
 
-async function handleKeySave(keyName: string, rawValue: string) {
+async function handleKeySave(keyName: string, rawValue: string, force = false) {
   if (savingKeyName) return;
 
   const value = toStoredValue(rawValue);
@@ -380,11 +386,23 @@ async function handleKeySave(keyName: string, rawValue: string) {
       projectId: selectedProject,
       figmaFileId: figmaFileKey || undefined,
       triggeredBy: "plugin",
+      expectedValue: target?.baseValue,
+      force,
     });
-    keyResults = keyResults.map((k) =>
-      k.keyName === keyName ? response.key : k,
-    );
-    showNotify(`업데이트 완료: ${keyName}`);
+
+    // 서버가 반환한 값으로 갱신 (conflict면 Lokalise 최신 값)
+    keyResults = keyResults.map((k) => (k.keyName === keyName ? response.key : k));
+
+    if (response.status === "conflict") {
+      // 사용자가 입력하던 내용은 유지한 채 최신 값을 보여주고 재확인 받는다
+      keyEdits.set(keyName, value);
+      keyConflicts.add(keyName);
+      showNotify(`${keyName}: Lokalise에서 이미 수정된 key입니다. 최신 값을 확인해주세요.`);
+    } else {
+      keyEdits.delete(keyName);
+      keyConflicts.delete(keyName);
+      showNotify(`업데이트 완료: ${keyName}`);
+    }
   } catch (err) {
     showNotify(`업데이트 실패: ${err instanceof Error ? err.message : err}`);
   } finally {
@@ -475,6 +493,8 @@ async function handleBulkApply() {
       keyName: e.keyName,
       value: e.value,
       mode: e.status === "new" ? "create" : "update",
+      // 미리보기 시점에 확인한 값 — 그 사이 Lokalise가 바뀌었으면 서버가 건너뛴다
+      expectedValue: e.currentValue ?? undefined,
     }));
 
   if (items.length === 0) {
@@ -819,16 +839,28 @@ function renderKeysTab(): string {
 
 function renderKeyItem(key: KeyEntry): string {
   const saving = savingKeyName === key.keyName;
+  const conflict = keyConflicts.has(key.keyName);
+  const edited = keyEdits.get(key.keyName);
+  const value = edited !== undefined ? edited : key.baseValue;
+
   return `
-    <div class="node-item" data-key-item="${escapeHtml(key.keyName)}">
+    <div class="node-item ${conflict ? "node-item--conflict" : ""}" data-key-item="${escapeHtml(key.keyName)}">
       <div class="node-item-header">
         <code class="key-name">${escapeHtml(key.keyName)}</code>
-        <button class="btn btn-sm btn-primary" data-action="save-key" ${saving || savingKeyName ? "disabled" : ""}>
-          ${saving ? "저장 중..." : "저장"}
+        <button class="btn btn-sm ${conflict ? "btn-danger" : "btn-primary"}" data-action="save-key"
+          ${conflict ? 'data-force="1"' : ""} ${savingKeyName ? "disabled" : ""}>
+          ${saving ? "저장 중..." : conflict ? "덮어쓰기" : "저장"}
         </button>
       </div>
+      ${conflict
+        ? `<div class="conflict-notice">
+            ⚠️ Lokalise에서 이미 수정된 key입니다. 저장하지 않았습니다.
+            <div class="conflict-current">최신 값: "${escapeHtml(toDisplayValue(key.baseValue))}"</div>
+            <button class="btn btn-sm btn-ghost" data-action="use-latest">최신 값 가져오기</button>
+          </div>`
+        : ""}
       <div class="value-input-group">
-        <textarea class="value-input" data-key-value placeholder="번역 텍스트" rows="2">${escapeHtml(toDisplayValue(key.baseValue))}</textarea>
+        <textarea class="value-input" data-key-value placeholder="번역 텍스트" rows="2">${escapeHtml(toDisplayValue(value))}</textarea>
       </div>
     </div>
   `;
@@ -1068,12 +1100,33 @@ function bindKeysEvents() {
     handleKeySearch();
   });
 
+  // 입력 중에는 렌더하지 않고 state만 갱신 (다른 행 저장 시 입력 내용 유실 방지)
+  document.querySelectorAll("[data-key-value]").forEach((el) => {
+    el.addEventListener("input", (e) => {
+      const item = (el as HTMLElement).closest("[data-key-item]") as HTMLElement | null;
+      if (!item) return;
+      keyEdits.set(item.dataset.keyItem!, toStoredValue((e.target as HTMLTextAreaElement).value));
+    });
+  });
+
   document.querySelectorAll("[data-action='save-key']").forEach((el) => {
     el.addEventListener("click", () => {
       const item = (el as HTMLElement).closest("[data-key-item]") as HTMLElement | null;
       const textarea = item?.querySelector("[data-key-value]") as HTMLTextAreaElement | null;
       if (!item || !textarea) return;
-      handleKeySave(item.dataset.keyItem!, textarea.value);
+      handleKeySave(item.dataset.keyItem!, textarea.value, (el as HTMLElement).dataset.force === "1");
+    });
+  });
+
+  // 충돌 시 내 수정 내용을 버리고 Lokalise 최신 값으로 되돌리기
+  document.querySelectorAll("[data-action='use-latest']").forEach((el) => {
+    el.addEventListener("click", () => {
+      const item = (el as HTMLElement).closest("[data-key-item]") as HTMLElement | null;
+      if (!item) return;
+      const keyName = item.dataset.keyItem!;
+      keyEdits.delete(keyName);
+      keyConflicts.delete(keyName);
+      render();
     });
   });
 }

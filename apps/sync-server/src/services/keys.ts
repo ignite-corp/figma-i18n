@@ -10,6 +10,9 @@ const config = loadConfig();
 /** 랭킹 대상으로 뽑아올 최대 후보 수 */
 const FIND_CANDIDATE_LIMIT = 200;
 
+/** Lokalise 실시간 조회 시 한 요청에 담을 key 수 (URL 길이 제한 고려) */
+const LIVE_LOOKUP_CHUNK_SIZE = 50;
+
 /** keyName 또는 value에 대한 부분 일치 검색 */
 export async function findKeys(
   query: string,
@@ -52,18 +55,21 @@ export async function findKeys(
   return { results, total };
 }
 
-/** keyName 목록으로 캐시 조회 (JSON 미리보기용) */
+/**
+ * keyName 목록의 Lokalise 최신 값을 조회하고 캐시에 반영 (JSON 미리보기용).
+ * 캐시만 보면 Lokalise에서 직접 수정된 내용을 놓치므로 해당 key들만 실시간 확인한다.
+ */
 export async function lookupKeys(
   keyNames: string[],
   projectKey?: string,
 ): Promise<KeyEntry[]> {
   const projectId = resolveProjectId(config, projectKey);
+  const lokalise = getLokaliseClient(projectKey);
 
-  const rows = await prisma.lokaliseKeyCache.findMany({
-    where: { projectId, isArchived: false, keyName: { in: keyNames } },
-  });
+  const live = await fetchLiveValues(lokalise, keyNames);
+  await syncCacheFromLive(projectId, live);
 
-  return rows.map(toKeyEntry);
+  return [...live.values()];
 }
 
 /** 단일 key의 value 업데이트 (전 언어 반영, FR 계열은 자동 번역) */
@@ -73,18 +79,40 @@ export async function updateKeyValue(input: {
   projectKey?: string;
   figmaFileId?: string;
   triggeredBy?: string;
-}): Promise<KeyEntry> {
+  expectedValue?: string;
+  force?: boolean;
+}): Promise<{ status: "updated" | "conflict"; key: KeyEntry }> {
+  const projectId = resolveProjectId(config, input.projectKey);
   const lokalise = getLokaliseClient(input.projectKey);
+
+  // 쓰기 직전 Lokalise 최신 값과 대조 (사용자가 본 값이 옛날 값이면 덮어쓰기 방지)
+  if (input.expectedValue !== undefined && !input.force) {
+    const live = await fetchLiveValues(lokalise, [input.keyName]);
+    await syncCacheFromLive(projectId, live);
+
+    const current = live.get(input.keyName);
+    if (!current) throw new Error(`Lokalise에 없는 key입니다: ${input.keyName}`);
+    if (current.baseValue !== input.expectedValue) {
+      logger.info(
+        { keyName: input.keyName },
+        "Lokalise 최신 값과 달라 업데이트를 보류함",
+      );
+      return { status: "conflict", key: current };
+    }
+  }
+
   const buildTranslations = await createTranslationBuilder(lokalise, {
     [input.keyName]: input.value,
   });
 
-  return applyKeyUpdate({
+  const key = await applyKeyUpdate({
     ...input,
-    projectId: resolveProjectId(config, input.projectKey),
+    projectId,
     lokalise,
     buildTranslations,
   });
+
+  return { status: "updated", key };
 }
 
 /** 번역 배열이 이미 준비된 상태에서 실제 업데이트를 수행 */
@@ -135,16 +163,65 @@ export async function bulkUpsertKeys(input: {
   const projectId = resolveProjectId(config, input.projectKey);
   const lokalise = getLokaliseClient(input.projectKey);
 
-  // 번역은 전체 항목을 한 번에 배치 처리
-  const buildTranslations = await createTranslationBuilder(
+  // 쓰기 직전 대상 key들의 Lokalise 최신 상태를 한 번에 확인
+  const live = await fetchLiveValues(
     lokalise,
-    Object.fromEntries(input.items.map((i) => [i.keyName, i.value])),
+    input.items.map((i) => i.keyName),
   );
-
-  const creates = input.items.filter((i) => i.mode === "create");
-  const updates = input.items.filter((i) => i.mode === "update");
+  await syncCacheFromLive(projectId, live);
 
   const results: BulkKeyResult[] = [];
+  const creates: BulkKeyItem[] = [];
+  const updates: BulkKeyItem[] = [];
+
+  for (const item of input.items) {
+    const current = live.get(item.keyName);
+
+    if (item.mode === "create") {
+      if (current) {
+        results.push({
+          keyName: item.keyName,
+          mode: "create",
+          success: false,
+          conflict: true,
+          error: "이미 Lokalise에 존재하는 key입니다 — 미리보기를 다시 실행해주세요",
+        });
+        continue;
+      }
+      creates.push(item);
+      continue;
+    }
+
+    if (!current) {
+      results.push({
+        keyName: item.keyName,
+        mode: "update",
+        success: false,
+        conflict: true,
+        error: "Lokalise에 없는 key입니다 — 미리보기를 다시 실행해주세요",
+      });
+      continue;
+    }
+    if (item.expectedValue !== undefined && current.baseValue !== item.expectedValue) {
+      results.push({
+        keyName: item.keyName,
+        mode: "update",
+        success: false,
+        conflict: true,
+        error: `Lokalise에서 이미 변경된 값입니다 (현재: "${current.baseValue}") — 미리보기를 다시 실행해주세요`,
+      });
+      continue;
+    }
+    updates.push(item);
+  }
+
+  if (creates.length === 0 && updates.length === 0) return results;
+
+  // 번역은 실제로 반영할 항목만 한 번에 배치 처리
+  const buildTranslations = await createTranslationBuilder(
+    lokalise,
+    Object.fromEntries([...creates, ...updates].map((i) => [i.keyName, i.value])),
+  );
 
   if (creates.length > 0) {
     results.push(
@@ -176,6 +253,53 @@ export async function bulkUpsertKeys(input: {
   }
 
   return results;
+}
+
+/** Lokalise에서 해당 key들의 현재 값을 조회 (이름 기준, 청크 단위) */
+async function fetchLiveValues(
+  lokalise: ReturnType<typeof getLokaliseClient>,
+  keyNames: string[],
+): Promise<Map<string, KeyEntry>> {
+  const unique = [...new Set(keyNames)];
+  const found = new Map<string, KeyEntry>();
+
+  for (let i = 0; i < unique.length; i += LIVE_LOOKUP_CHUNK_SIZE) {
+    const chunk = unique.slice(i, i + LIVE_LOOKUP_CHUNK_SIZE);
+    const keys = await lokalise.searchKeys(chunk.join(","));
+
+    for (const key of keys) {
+      const keyName = key.key_name.web || key.key_name.other;
+      // filter_keys가 부분 일치를 반환할 수 있으므로 이름이 정확히 같은 것만 사용
+      if (!chunk.includes(keyName)) continue;
+      found.set(keyName, {
+        lokaliseKeyId: key.key_id,
+        keyName,
+        baseValue:
+          key.translations.find((t) => t.language_iso === lokalise.baseLanguage)
+            ?.translation ?? "",
+      });
+    }
+  }
+
+  return found;
+}
+
+/** 실시간 조회 결과를 캐시에 반영 */
+async function syncCacheFromLive(projectId: string, live: Map<string, KeyEntry>) {
+  for (const key of live.values()) {
+    await prisma.lokaliseKeyCache.upsert({
+      where: { projectId_lokaliseKeyId: { projectId, lokaliseKeyId: key.lokaliseKeyId } },
+      update: { keyName: key.keyName, baseValue: key.baseValue, fetchedAt: new Date() },
+      create: {
+        lokaliseKeyId: key.lokaliseKeyId,
+        projectId,
+        keyName: key.keyName,
+        baseValue: key.baseValue,
+        platforms: ["web"],
+        fetchedAt: new Date(),
+      },
+    });
+  }
 }
 
 async function runCreates(
