@@ -1,7 +1,12 @@
 import { on, showUI, emit } from "@create-figma-plugin/utilities";
 import { scanSelection } from "./scanner";
 import { readPluginData, writePluginData } from "./plugin-data";
-import { applyTextsByKey, type TextApplyItem } from "./text-applier";
+import {
+  applyTextsByKey,
+  applyTextsByNodeId,
+  type TextApplyItem,
+  type NodeTextApplyItem,
+} from "./text-applier";
 import type { I18nPluginData } from "shared-types";
 
 export default function () {
@@ -29,6 +34,11 @@ export default function () {
 
   on("APPLY_TEXTS", async (items: TextApplyItem[]) => {
     const result = await applyTextsByKey(items);
+    emit("APPLY_TEXTS_DONE", result);
+  });
+
+  on("APPLY_NODE_TEXTS", async (items: NodeTextApplyItem[]) => {
+    const result = await applyTextsByNodeId(items);
     emit("APPLY_TEXTS_DONE", result);
   });
 

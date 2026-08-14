@@ -310,6 +310,21 @@ async function handleSync() {
       `동기화 완료: ${response.summary.succeeded}건 성공, ${response.summary.failed}건 실패`,
     );
 
+    // value를 직접 수정한 항목은 Figma 텍스트도 같은 값으로 맞춘다
+    const appliedTexts = response.results
+      .filter(
+        (item) =>
+          item.success &&
+          item.action !== "delete_key" &&
+          item.action !== "ignore" &&
+          userValues.has(item.nodeId),
+      )
+      .map((item) => ({
+        nodeId: item.nodeId,
+        value: toDisplayValue(userValues.get(item.nodeId)!),
+      }));
+    if (appliedTexts.length > 0) emit("APPLY_NODE_TEXTS", appliedTexts);
+
     for (const item of response.results) {
       if (item.success) {
         const idx = scanResults.findIndex((r) => r.nodeId === item.nodeId);
