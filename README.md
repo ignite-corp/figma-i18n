@@ -171,6 +171,23 @@ Key 이름 규칙: `domain.section.element.modifier` (예: `vehicle.card.price.l
 
 동기화 완료 시 결과 메시지가 표시되고 상태가 갱신됩니다.
 
+### 8. 키 검색 탭
+
+Figma 스캔과 무관하게 Lokalise에 등록된 key를 직접 수정할 때 사용합니다.
+
+1. key 이름 또는 값의 일부를 입력하고 **[검색]** (또는 Enter)
+2. 결과 항목의 value를 수정한 뒤 **[저장]**
+
+저장 시 프로젝트의 모든 언어에 해당 값이 반영되며, base가 EN인 프로젝트의 FR 계열 언어는 DeepL 자동 번역이 적용됩니다 (동기화와 동일한 규칙).
+
+### 9. JSON 추가 탭
+
+`{ "KEY": "값" }` 형태의 JSON을 붙여넣어 key를 대량으로 생성·수정합니다. 중첩 객체는 지원하지 않습니다.
+
+1. JSON을 붙여넣고 **[미리보기]** — 캐시와 대조해 `신규` / `변경` / `동일`로 분류합니다
+2. 반영할 항목을 체크 (신규·변경은 기본 선택, 동일은 선택 불가)
+3. **[반영]** — 신규는 생성, 변경은 value 업데이트
+
 ---
 
 ## API 엔드포인트
@@ -183,6 +200,10 @@ Key 이름 규칙: `domain.section.element.modifier` (예: `vehicle.card.price.l
 | `POST` | `/api/cache/refresh` | Lokalise key 캐시 갱신 |
 | `GET` | `/api/cache/status` | 캐시 상태 조회 |
 | `GET` | `/api/projects` | 사용 가능한 Lokalise 프로젝트 목록 |
+| `GET` | `/api/keys/find` | key 이름·값 부분 일치 검색 |
+| `POST` | `/api/keys/lookup` | key 이름 목록의 존재 여부·현재 값 조회 |
+| `POST` | `/api/keys/update` | 특정 key의 value 업데이트 |
+| `POST` | `/api/keys/bulk` | JSON 기반 key 대량 생성·업데이트 |
 
 ---
 

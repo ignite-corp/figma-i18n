@@ -7,6 +7,9 @@ import type {
   SyncItem,
   I18nPluginData,
   CacheStatusResponse,
+  KeyEntry,
+  BulkKeyItem,
+  BulkKeyResult,
 } from "shared-types";
 import {
   scanNodes,
@@ -14,10 +17,17 @@ import {
   getCacheStatus,
   refreshCache,
   translateFr,
+  findKeys,
+  lookupKeys,
+  updateKeyValue,
+  bulkUpsertKeys,
 } from "./api-client";
 import "!./ui.css";
 
 // ─── State ───
+type Tab = "scan" | "keys" | "bulk";
+
+let activeTab: Tab = "scan";
 let figmaFileKey = "";
 let extractedNodes: ExtractedNode[] = [];
 let scanResults: ScanResultNode[] = [];
@@ -26,6 +36,12 @@ let isLoading = false;
 let isSyncing = false;
 let cacheStatus: CacheStatusResponse | null = null;
 let isCacheRefreshing = false;
+
+// 스캔 탭의 빈 상태 / 에러 안내
+let scanNotice: { kind: "empty" | "error"; message: string } | null = {
+  kind: "empty",
+  message: "Frame을 선택하고 [스캔] 버튼을 눌러주세요",
+};
 
 // 사용자가 선택한 action 저장
 const userActions: Map<
@@ -41,6 +57,31 @@ const checkedNodes: Set<string> = new Set();
 
 // 검색 쿼리
 let searchQuery = "";
+
+// ─── Key 검색 탭 state ───
+let keyQuery = "";
+let keyResults: KeyEntry[] = [];
+let keyTotal = 0;
+let keySearched = false;
+let isKeySearching = false;
+let savingKeyName: string | null = null;
+
+// ─── JSON 대량 추가 탭 state ───
+type BulkStatus = "new" | "changed" | "same";
+interface BulkEntry {
+  keyName: string;
+  value: string;
+  status: BulkStatus;
+  currentValue: string | null;
+}
+
+let bulkJson = "";
+let bulkError = "";
+let bulkEntries: BulkEntry[] = [];
+let bulkChecked: Set<string> = new Set();
+let bulkResults: BulkKeyResult[] = [];
+let isBulkChecking = false;
+let isBulkApplying = false;
 
 const ANNOTATION_CATEGORY_IDS = ["14539:0", "12208:0"];
 
@@ -70,7 +111,9 @@ on("BULK_SAVE_DONE", () => {
 // ─── Scan logic ───
 async function handleScanResult() {
   if (extractedNodes.length === 0) {
-    renderEmpty("선택된 영역에 텍스트 노드가 없습니다");
+    scanResults = [];
+    scanNotice = { kind: "empty", message: "선택된 영역에 텍스트 노드가 없습니다" };
+    render();
     return;
   }
 
@@ -84,12 +127,15 @@ async function handleScanResult() {
     });
 
     scanResults = response.results;
+    scanNotice = null;
     userActions.clear();
     userValues.clear();
     checkedNodes.clear();
-    render();
   } catch (err) {
-    renderError(`서버 연결 실패: ${err instanceof Error ? err.message : err}`);
+    scanNotice = {
+      kind: "error",
+      message: `서버 연결 실패: ${err instanceof Error ? err.message : err}`,
+    };
   } finally {
     setLoading(false);
   }
@@ -278,7 +324,6 @@ async function handleSync() {
         }
       }
     }
-    render();
   } catch (err) {
     showNotify(`동기화 실패: ${err instanceof Error ? err.message : err}`);
   } finally {
@@ -287,28 +332,194 @@ async function handleSync() {
   }
 }
 
+// ─── Key 검색 / 수정 logic ───
+async function handleKeySearch() {
+  const query = keyQuery.trim();
+  if (!query) {
+    showNotify("검색어를 입력해주세요.");
+    return;
+  }
+  if (isKeySearching) return;
+
+  isKeySearching = true;
+  render();
+
+  try {
+    const response = await findKeys(query, selectedProject);
+    keyResults = response.results;
+    keyTotal = response.total;
+    keySearched = true;
+  } catch (err) {
+    keyResults = [];
+    keyTotal = 0;
+    keySearched = true;
+    showNotify(`검색 실패: ${err instanceof Error ? err.message : err}`);
+  } finally {
+    isKeySearching = false;
+    render();
+  }
+}
+
+async function handleKeySave(keyName: string, rawValue: string) {
+  if (savingKeyName) return;
+
+  const value = toStoredValue(rawValue);
+  const target = keyResults.find((k) => k.keyName === keyName);
+  if (target && target.baseValue === value) {
+    showNotify("변경된 내용이 없습니다.");
+    return;
+  }
+
+  savingKeyName = keyName;
+  render();
+
+  try {
+    const response = await updateKeyValue({
+      keyName,
+      value,
+      projectId: selectedProject,
+      figmaFileId: figmaFileKey || undefined,
+      triggeredBy: "plugin",
+    });
+    keyResults = keyResults.map((k) =>
+      k.keyName === keyName ? response.key : k,
+    );
+    showNotify(`업데이트 완료: ${keyName}`);
+  } catch (err) {
+    showNotify(`업데이트 실패: ${err instanceof Error ? err.message : err}`);
+  } finally {
+    savingKeyName = null;
+    render();
+  }
+}
+
+// ─── JSON 대량 추가 logic ───
+/** JSON 텍스트를 { key: value } 로 파싱. 오류 메시지를 반환하면 실패 */
+function parseBulkJson(text: string): { entries: Array<[string, string]> } | { error: string } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    return { error: `JSON 파싱 실패: ${err instanceof Error ? err.message : err}` };
+  }
+
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return { error: '최상위가 { "KEY": "값" } 형태의 객체여야 합니다.' };
+  }
+
+  const entries = Object.entries(parsed as Record<string, unknown>);
+  if (entries.length === 0) return { error: "항목이 비어 있습니다." };
+
+  const invalid = entries.filter(([, v]) => typeof v !== "string").map(([k]) => k);
+  if (invalid.length > 0) {
+    return {
+      error: `값이 문자열이 아닌 키가 있습니다 (중첩 객체 미지원): ${invalid.slice(0, 5).join(", ")}${invalid.length > 5 ? ` 외 ${invalid.length - 5}개` : ""}`,
+    };
+  }
+
+  return { entries: entries as Array<[string, string]> };
+}
+
+async function handleBulkCheck() {
+  if (isBulkChecking) return;
+
+  const parsed = parseBulkJson(bulkJson.trim());
+  if ("error" in parsed) {
+    bulkError = parsed.error;
+    bulkEntries = [];
+    bulkChecked.clear();
+    bulkResults = [];
+    render();
+    return;
+  }
+
+  bulkError = "";
+  bulkResults = [];
+  isBulkChecking = true;
+  render();
+
+  try {
+    const response = await lookupKeys({
+      keyNames: parsed.entries.map(([k]) => k),
+      projectId: selectedProject,
+    });
+    const existing = new Map(response.found.map((k) => [k.keyName, k.baseValue]));
+
+    bulkEntries = parsed.entries.map(([keyName, rawValue]) => {
+      const value = toStoredValue(rawValue);
+      const currentValue = existing.has(keyName) ? existing.get(keyName)! : null;
+      const status: BulkStatus =
+        currentValue === null ? "new" : currentValue === value ? "same" : "changed";
+      return { keyName, value, status, currentValue };
+    });
+
+    bulkChecked = new Set(
+      bulkEntries.filter((e) => e.status !== "same").map((e) => e.keyName),
+    );
+  } catch (err) {
+    bulkError = `조회 실패: ${err instanceof Error ? err.message : err}`;
+    bulkEntries = [];
+    bulkChecked.clear();
+  } finally {
+    isBulkChecking = false;
+    render();
+  }
+}
+
+async function handleBulkApply() {
+  if (isBulkApplying) return;
+
+  const items: BulkKeyItem[] = bulkEntries
+    .filter((e) => e.status !== "same" && bulkChecked.has(e.keyName))
+    .map((e) => ({
+      keyName: e.keyName,
+      value: e.value,
+      mode: e.status === "new" ? "create" : "update",
+    }));
+
+  if (items.length === 0) {
+    showNotify("반영할 항목이 없습니다. 체크된 항목을 확인해주세요.");
+    return;
+  }
+
+  isBulkApplying = true;
+  render();
+
+  try {
+    const response = await bulkUpsertKeys({
+      items,
+      projectId: selectedProject,
+      figmaFileId: figmaFileKey || undefined,
+      triggeredBy: "plugin",
+    });
+
+    bulkResults = response.results;
+    const succeeded = new Set(
+      response.results.filter((r) => r.success).map((r) => r.keyName),
+    );
+
+    // 성공한 항목은 반영 완료 상태로 전환
+    bulkEntries = bulkEntries.map((e) =>
+      succeeded.has(e.keyName)
+        ? { ...e, status: "same", currentValue: e.value }
+        : e,
+    );
+    succeeded.forEach((keyName) => bulkChecked.delete(keyName));
+
+    showNotify(
+      `반영 완료: ${response.summary.succeeded}건 성공, ${response.summary.failed}건 실패`,
+    );
+  } catch (err) {
+    showNotify(`반영 실패: ${err instanceof Error ? err.message : err}`);
+  } finally {
+    isBulkApplying = false;
+    render();
+  }
+}
+
 // ─── Rendering ───
 function render() {
   const root = document.getElementById("create-figma-plugin")!;
-
-  const filtered =
-    activeFilter === "all"
-      ? scanResults
-      : scanResults.filter((r) => r.status === activeFilter);
-
-  // 검색 필터링
-  const query = searchQuery.toLowerCase();
-  const displayed = query
-    ? filtered.filter((r) => {
-        const keyMatch = r.existingMapping?.keyName?.toLowerCase().includes(query)
-          || r.suggestedKey?.toLowerCase().includes(query)
-          || userActions.get(r.nodeId)?.keyName?.toLowerCase().includes(query);
-        const valueMatch = r.text.toLowerCase().includes(query);
-        return keyMatch || valueMatch;
-      })
-    : filtered;
-
-  const checkedCount = checkedNodes.size;
   const scrollTop = document.querySelector(".node-list")?.scrollTop ?? 0;
 
   root.innerHTML = `
@@ -319,38 +530,17 @@ function render() {
       <div class="toolbar">
         <span class="toolbar-title">i18n Sync <span class="toolbar-version">v${VERSION}</span></span>
         <div class="toolbar-actions">
-                              <button class="btn btn-secondary" id="btn-scan">스캔</button>
           <button class="btn btn-secondary" id="btn-refresh-cache" ${isCacheRefreshing ? "disabled" : ""}>
             ${isCacheRefreshing ? "갱신 중..." : "캐시 갱신"}
-          </button>
-          <button class="btn btn-primary" id="btn-sync" ${checkedCount === 0 || isSyncing ? "disabled" : ""}>
-            동기화${checkedCount > 0 ? ` (${checkedCount})` : ""}
           </button>
         </div>
       </div>
 
+      ${renderTabs()}
 
-
-      <div class="filter-bar">
-        ${renderFilterChips()}
-      </div>
-
-      <div class="search-bar">
-        <input class="search-input" type="text" id="search-input" placeholder="key 또는 텍스트 검색..." value="${escapeHtml(searchQuery)}" />
-      </div>
-
-      <div class="group-select-bar">
-        <button class="btn btn-sm btn-ghost" data-group-select="all">전체 선택</button>
-        <button class="btn btn-sm btn-ghost" data-group-select="candidate">후보</button>
-        <button class="btn btn-sm btn-ghost" data-group-select="changed">변경</button>
-        <button class="btn btn-sm btn-ghost" data-group-select="new">신규</button>
-        <span class="group-select-divider"></span>
-        <button class="btn btn-sm btn-ghost" data-group-deselect="all">선택 해제</button>
-      </div>
-
-      <div class="node-list">
-        ${displayed.map((r) => renderNodeItem(r)).join("")}
-      </div>
+      ${activeTab === "scan" ? renderScanTab() : ""}
+      ${activeTab === "keys" ? renderKeysTab() : ""}
+      ${activeTab === "bulk" ? renderBulkTab() : ""}
     </div>
   `;
 
@@ -360,6 +550,24 @@ function render() {
   bindEvents();
 }
 
+function renderTabs(): string {
+  const tabs: Array<{ key: Tab; label: string }> = [
+    { key: "scan", label: "스캔" },
+    { key: "keys", label: "키 검색" },
+    { key: "bulk", label: "JSON 추가" },
+  ];
+
+  return `
+    <div class="tab-bar">
+      ${tabs
+        .map(
+          (t) =>
+            `<button class="tab ${activeTab === t.key ? "active" : ""}" data-tab="${t.key}">${t.label}</button>`,
+        )
+        .join("")}
+    </div>
+  `;
+}
 
 function renderProjectSelector(): string {
   return `
@@ -381,6 +589,73 @@ function renderCacheStatus(): string {
   return `
     <div class="cache-status">
       캐시 <strong>${cacheStatus.totalKeys.toLocaleString()}</strong>개 키 · 마지막 갱신: ${lastSync}
+    </div>
+  `;
+}
+
+// ─── 스캔 탭 ───
+function renderScanTab(): string {
+  const checkedCount = checkedNodes.size;
+
+  const actions = `
+    <div class="tab-actions">
+      <button class="btn btn-secondary" id="btn-scan">스캔</button>
+      <div class="tab-actions-spacer"></div>
+      <button class="btn btn-primary" id="btn-sync" ${checkedCount === 0 || isSyncing ? "disabled" : ""}>
+        동기화${checkedCount > 0 ? ` (${checkedCount})` : ""}
+      </button>
+    </div>
+  `;
+
+  if (isLoading) return `${actions}${renderStateView("", "처리 중...", true)}`;
+  if (scanNotice) {
+    return `${actions}${renderStateView(
+      scanNotice.kind === "error" ? "⚠️" : "🔍",
+      scanNotice.message,
+      false,
+      scanNotice.kind === "error",
+    )}`;
+  }
+
+  const filtered =
+    activeFilter === "all"
+      ? scanResults
+      : scanResults.filter((r) => r.status === activeFilter);
+
+  // 검색 필터링
+  const query = searchQuery.toLowerCase();
+  const displayed = query
+    ? filtered.filter((r) => {
+        const keyMatch = r.existingMapping?.keyName?.toLowerCase().includes(query)
+          || r.suggestedKey?.toLowerCase().includes(query)
+          || userActions.get(r.nodeId)?.keyName?.toLowerCase().includes(query);
+        const valueMatch = r.text.toLowerCase().includes(query);
+        return keyMatch || valueMatch;
+      })
+    : filtered;
+
+  return `
+    ${actions}
+
+    <div class="filter-bar">
+      ${renderFilterChips()}
+    </div>
+
+    <div class="search-bar">
+      <input class="search-input" type="text" id="search-input" placeholder="key 또는 텍스트 검색..." value="${escapeHtml(searchQuery)}" />
+    </div>
+
+    <div class="group-select-bar">
+      <button class="btn btn-sm btn-ghost" data-group-select="all">전체 선택</button>
+      <button class="btn btn-sm btn-ghost" data-group-select="candidate">후보</button>
+      <button class="btn btn-sm btn-ghost" data-group-select="changed">변경</button>
+      <button class="btn btn-sm btn-ghost" data-group-select="new">신규</button>
+      <span class="group-select-divider"></span>
+      <button class="btn btn-sm btn-ghost" data-group-deselect="all">선택 해제</button>
+    </div>
+
+    <div class="node-list">
+      ${displayed.map((r) => renderNodeItem(r)).join("")}
     </div>
   `;
 }
@@ -460,7 +735,7 @@ function renderExistingMapping(result: ScanResultNode): string {
       ${(result.status === "changed" || result.status === "matched") && !isDeleteAction
         ? `<div class="value-input-group">
             <label class="value-label">Value</label>
-            <textarea class="value-input" data-value-input="${result.nodeId}" placeholder="번역 텍스트" rows="2">${escapeHtml(currentValue.replace(/\\n/g, "\n"))}</textarea>
+            <textarea class="value-input" data-value-input="${result.nodeId}" placeholder="번역 텍스트" rows="2">${escapeHtml(toDisplayValue(currentValue))}</textarea>
           </div>`
         : ""}
     </div>
@@ -500,70 +775,156 @@ function renderNewKeyInput(result: ScanResultNode): string {
     </div>
     <div class="value-input-group">
       <label class="value-label">Value</label>
-      <textarea class="value-input" data-value-input="${result.nodeId}" placeholder="번역 텍스트" rows="2">${escapeHtml(currentValue.replace(/\\n/g, "\n"))}</textarea>
+      <textarea class="value-input" data-value-input="${result.nodeId}" placeholder="번역 텍스트" rows="2">${escapeHtml(toDisplayValue(currentValue))}</textarea>
     </div>
   `;
 }
 
-function renderEmpty(message: string) {
-  document.getElementById("create-figma-plugin")!.innerHTML = `
-    <div class="container">
-      ${renderProjectSelector()}
-      ${renderCacheStatus()}
-      <div class="toolbar">
-        <span class="toolbar-title">i18n Sync <span class="toolbar-version">v${VERSION}</span></span>
-        <div class="toolbar-actions">
-                              <button class="btn btn-secondary" id="btn-refresh-cache" ${isCacheRefreshing ? "disabled" : ""}>
-            ${isCacheRefreshing ? "갱신 중..." : "캐시 갱신"}
-          </button>
-          <button class="btn btn-primary" id="btn-scan">스캔</button>
-        </div>
-      </div>
-
-      <div class="state-view">
-        <div class="state-icon">🔍</div>
-        <div class="state-message">${message}</div>
+// ─── 키 검색 탭 ───
+function renderKeysTab(): string {
+  const search = `
+    <div class="search-bar">
+      <div class="settings-row">
+        <input class="search-input" type="text" id="key-search-input"
+          placeholder="key 이름 또는 값으로 검색 (Enter)" value="${escapeHtml(keyQuery)}" />
+        <button class="btn btn-primary" id="btn-key-search" ${isKeySearching ? "disabled" : ""}>
+          ${isKeySearching ? "검색 중..." : "검색"}
+        </button>
       </div>
     </div>
   `;
-  bindEvents();
+
+  if (isKeySearching) return `${search}${renderStateView("", "검색 중...", true)}`;
+
+  if (!keySearched) {
+    return `${search}${renderStateView("🔑", "Lokalise에 등록된 key를 이름이나 값으로 검색해 바로 수정할 수 있습니다")}`;
+  }
+
+  if (keyResults.length === 0) {
+    return `${search}${renderStateView("🔍", `"${keyQuery}" 검색 결과가 없습니다`)}`;
+  }
+
+  const truncated = keyTotal > keyResults.length;
+
+  return `
+    ${search}
+    <div class="result-summary">
+      ${keyResults.length.toLocaleString()}개 표시${truncated ? ` · 전체 ${keyTotal.toLocaleString()}개 (검색어를 더 구체적으로 입력하세요)` : ""}
+    </div>
+    <div class="node-list">
+      ${keyResults.map((k) => renderKeyItem(k)).join("")}
+    </div>
+  `;
 }
 
-function renderError(message: string) {
-  document.getElementById("create-figma-plugin")!.innerHTML = `
-    <div class="container">
-      ${renderProjectSelector()}
-      ${renderCacheStatus()}
-      <div class="toolbar">
-        <span class="toolbar-title">i18n Sync <span class="toolbar-version">v${VERSION}</span></span>
-        <div class="toolbar-actions">
-                    <button class="btn btn-secondary" id="btn-refresh-cache" ${isCacheRefreshing ? "disabled" : ""}>
-            ${isCacheRefreshing ? "갱신 중..." : "캐시 갱신"}
-          </button>
-          <button class="btn btn-primary" id="btn-scan">스캔</button>
-        </div>
+function renderKeyItem(key: KeyEntry): string {
+  const saving = savingKeyName === key.keyName;
+  return `
+    <div class="node-item" data-key-item="${escapeHtml(key.keyName)}">
+      <div class="node-item-header">
+        <code class="key-name">${escapeHtml(key.keyName)}</code>
+        <button class="btn btn-sm btn-primary" data-action="save-key" ${saving || savingKeyName ? "disabled" : ""}>
+          ${saving ? "저장 중..." : "저장"}
+        </button>
       </div>
-      <div class="state-view error">
-        <div class="state-icon">⚠️</div>
-        <div class="state-message">${message}</div>
+      <div class="value-input-group">
+        <textarea class="value-input" data-key-value placeholder="번역 텍스트" rows="2">${escapeHtml(toDisplayValue(key.baseValue))}</textarea>
       </div>
     </div>
   `;
-  bindEvents();
+}
+
+// ─── JSON 대량 추가 탭 ───
+function renderBulkTab(): string {
+  const counts = {
+    new: bulkEntries.filter((e) => e.status === "new").length,
+    changed: bulkEntries.filter((e) => e.status === "changed").length,
+    same: bulkEntries.filter((e) => e.status === "same").length,
+  };
+  const selectable = bulkEntries.filter((e) => e.status !== "same").length;
+  const checkedCount = bulkChecked.size;
+
+  const editor = `
+    <div class="bulk-editor">
+      <label class="settings-label">{ "KEY": "값" } 형태의 JSON을 붙여넣으세요</label>
+      <textarea class="bulk-input" id="bulk-input" rows="6" placeholder='{\n  "HOME_MAIN_TITLE": "안녕하세요",\n  "HOME_MAIN_BUTTON_EDIT": "수정"\n}'>${escapeHtml(bulkJson)}</textarea>
+      ${bulkError ? `<div class="bulk-error">${escapeHtml(bulkError)}</div>` : ""}
+      <div class="tab-actions">
+        <button class="btn btn-secondary" id="btn-bulk-check" ${isBulkChecking ? "disabled" : ""}>
+          ${isBulkChecking ? "확인 중..." : "미리보기"}
+        </button>
+        <div class="tab-actions-spacer"></div>
+        <button class="btn btn-primary" id="btn-bulk-apply" ${checkedCount === 0 || isBulkApplying ? "disabled" : ""}>
+          반영${checkedCount > 0 ? ` (${checkedCount})` : ""}
+        </button>
+      </div>
+    </div>
+  `;
+
+  if (isBulkChecking || isBulkApplying) {
+    return `${editor}${renderStateView("", isBulkApplying ? "반영 중..." : "확인 중...", true)}`;
+  }
+
+  if (bulkEntries.length === 0) {
+    return `${editor}${renderStateView("📋", "JSON을 붙여넣고 [미리보기]를 누르면 신규 / 변경 / 동일로 분류합니다")}`;
+  }
+
+  return `
+    ${editor}
+    <div class="result-summary">
+      신규 <strong>${counts.new}</strong> · 변경 <strong>${counts.changed}</strong> · 동일 <strong>${counts.same}</strong>
+      ${selectable > 0 ? `<span class="group-select-divider"></span>
+        <button class="btn btn-sm btn-ghost" id="btn-bulk-select-all">전체 선택</button>
+        <button class="btn btn-sm btn-ghost" id="btn-bulk-deselect-all">선택 해제</button>` : ""}
+    </div>
+    <div class="node-list">
+      ${bulkEntries.map((e, i) => renderBulkItem(e, i)).join("")}
+    </div>
+  `;
+}
+
+function renderBulkItem(entry: BulkEntry, index: number): string {
+  const checkable = entry.status !== "same";
+  const checked = bulkChecked.has(entry.keyName);
+  const failure = bulkResults.find((r) => r.keyName === entry.keyName && !r.success);
+
+  const badgeClass =
+    entry.status === "new" ? "badge-new" : entry.status === "changed" ? "badge-changed" : "badge-matched";
+  const badgeLabel =
+    entry.status === "new" ? "New" : entry.status === "changed" ? "Changed" : "Same";
+
+  return `
+    <div class="node-item ${checked ? "node-item--checked" : ""}">
+      <div class="node-item-header">
+        <label class="checkbox-label">
+          <input type="checkbox" class="node-checkbox" data-bulk-index="${index}"
+            ${checked ? "checked" : ""} ${!checkable ? "disabled" : ""} />
+          <span class="badge ${badgeClass}">${badgeLabel}</span>
+        </label>
+      </div>
+      <code class="key-name">${escapeHtml(entry.keyName)}</code>
+      <div class="bulk-value">${escapeHtml(toDisplayValue(entry.value))}</div>
+      ${entry.status === "changed"
+        ? `<div class="changed-diff">기존: "${escapeHtml(toDisplayValue(entry.currentValue ?? ""))}"</div>`
+        : ""}
+      ${failure ? `<div class="bulk-error">실패: ${escapeHtml(failure.error ?? "알 수 없는 오류")}</div>` : ""}
+    </div>
+  `;
+}
+
+// ─── 공통 상태 뷰 ───
+function renderStateView(icon: string, message: string, spinner = false, isError = false): string {
+  return `
+    <div class="state-view ${isError ? "error" : ""}">
+      ${spinner ? `<div class="loading-spinner"></div>` : `<div class="state-icon">${icon}</div>`}
+      <div class="state-message">${escapeHtml(message)}</div>
+    </div>
+  `;
 }
 
 function setLoading(loading: boolean) {
   isLoading = loading;
-  if (loading) {
-    document.getElementById("create-figma-plugin")!.innerHTML = `
-      <div class="container">
-        <div class="state-view">
-          <div class="loading-spinner"></div>
-          <div class="state-message">처리 중...</div>
-        </div>
-      </div>
-    `;
-  }
+  render();
 }
 
 // ─── Event Binding ───
@@ -575,16 +936,29 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-tab]").forEach((el) => {
+    el.addEventListener("click", () => {
+      activeTab = (el as HTMLElement).dataset.tab as Tab;
+      render();
+    });
+  });
+
+  document.getElementById("btn-refresh-cache")?.addEventListener("click", () => {
+    handleRefreshCache();
+  });
+
+  if (activeTab === "scan") bindScanEvents();
+  if (activeTab === "keys") bindKeysEvents();
+  if (activeTab === "bulk") bindBulkEvents();
+}
+
+function bindScanEvents() {
   document.getElementById("btn-scan")?.addEventListener("click", () => {
     emit("SCAN", { annotationCategoryIds: ANNOTATION_CATEGORY_IDS });
   });
 
   document.getElementById("btn-sync")?.addEventListener("click", () => {
     handleSync();
-  });
-
-  document.getElementById("btn-refresh-cache")?.addEventListener("click", () => {
-    handleRefreshCache();
   });
 
   document.querySelectorAll("[data-filter]").forEach((el) => {
@@ -609,7 +983,7 @@ function bindEvents() {
   });
 
   // 개별 체크박스
-  document.querySelectorAll(".node-checkbox").forEach((el) => {
+  document.querySelectorAll("[data-check-node]").forEach((el) => {
     el.addEventListener("change", () => {
       const nodeId = (el as HTMLInputElement).dataset.checkNode!;
       if ((el as HTMLInputElement).checked) {
@@ -675,8 +1049,71 @@ function bindEvents() {
   document.querySelectorAll("[data-value-input]").forEach((el) => {
     el.addEventListener("input", (e) => {
       const nodeId = (el as HTMLElement).dataset.valueInput!;
-      const value = (e.target as HTMLInputElement).value.replace(/\n/g, "\\n");
-      userValues.set(nodeId, value);
+      userValues.set(nodeId, toStoredValue((e.target as HTMLInputElement).value));
+    });
+  });
+}
+
+function bindKeysEvents() {
+  const input = document.getElementById("key-search-input") as HTMLInputElement | null;
+  // 입력 중에는 렌더하지 않고 state만 갱신 (포커스 유지)
+  input?.addEventListener("input", (e) => {
+    keyQuery = (e.target as HTMLInputElement).value;
+  });
+  input?.addEventListener("keydown", (e) => {
+    if ((e as KeyboardEvent).key === "Enter") handleKeySearch();
+  });
+
+  document.getElementById("btn-key-search")?.addEventListener("click", () => {
+    handleKeySearch();
+  });
+
+  document.querySelectorAll("[data-action='save-key']").forEach((el) => {
+    el.addEventListener("click", () => {
+      const item = (el as HTMLElement).closest("[data-key-item]") as HTMLElement | null;
+      const textarea = item?.querySelector("[data-key-value]") as HTMLTextAreaElement | null;
+      if (!item || !textarea) return;
+      handleKeySave(item.dataset.keyItem!, textarea.value);
+    });
+  });
+}
+
+function bindBulkEvents() {
+  // 입력 중에는 렌더하지 않고 state만 갱신 (포커스 유지)
+  document.getElementById("bulk-input")?.addEventListener("input", (e) => {
+    bulkJson = (e.target as HTMLTextAreaElement).value;
+  });
+
+  document.getElementById("btn-bulk-check")?.addEventListener("click", () => {
+    handleBulkCheck();
+  });
+
+  document.getElementById("btn-bulk-apply")?.addEventListener("click", () => {
+    handleBulkApply();
+  });
+
+  document.getElementById("btn-bulk-select-all")?.addEventListener("click", () => {
+    bulkChecked = new Set(
+      bulkEntries.filter((e) => e.status !== "same").map((e) => e.keyName),
+    );
+    render();
+  });
+
+  document.getElementById("btn-bulk-deselect-all")?.addEventListener("click", () => {
+    bulkChecked.clear();
+    render();
+  });
+
+  document.querySelectorAll("[data-bulk-index]").forEach((el) => {
+    el.addEventListener("change", () => {
+      const entry = bulkEntries[Number((el as HTMLElement).dataset.bulkIndex)];
+      if (!entry) return;
+      if ((el as HTMLInputElement).checked) {
+        bulkChecked.add(entry.keyName);
+      } else {
+        bulkChecked.delete(entry.keyName);
+      }
+      render();
     });
   });
 }
@@ -692,6 +1129,16 @@ function escapeHtml(str: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/** 저장된 `\n` 리터럴을 실제 개행으로 (표시용) */
+function toDisplayValue(value: string): string {
+  return value.replace(/\\n/g, "\n");
+}
+
+/** 실제 개행을 `\n` 리터럴로 (저장용) */
+function toStoredValue(value: string): string {
+  return value.replace(/\n/g, "\\n");
 }
 
 function statusLabel(status: NodeStatus): string {
@@ -717,16 +1164,12 @@ function actionLabel(action: SyncItem["action"]): string {
 }
 
 // ─── Initial render ───
-renderEmpty("Frame을 선택하고 [스캔] 버튼을 눌러주세요");
+render();
 
 getCacheStatus()
   .then((status) => {
     cacheStatus = status;
-    if (scanResults.length > 0) {
-      render();
-    } else {
-      renderEmpty("Frame을 선택하고 [스캔] 버튼을 눌러주세요");
-    }
+    render();
   })
   .catch(() => {
     // 서버 연결 전이거나 오프라인 상태일 때 무시

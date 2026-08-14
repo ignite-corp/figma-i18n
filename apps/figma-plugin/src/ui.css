@@ -121,6 +121,143 @@ body {
   align-items: center;
 }
 
+/* ─── Tab Bar ─── */
+.tab-bar {
+  display: flex;
+  padding: 0 12px;
+  border-bottom: 1px solid #EBEBEB;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.tab {
+  position: relative;
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  color: #888;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.12s;
+}
+
+.tab:hover:not(.active) {
+  color: #444;
+}
+
+.tab.active {
+  color: #1E1E1E;
+}
+
+.tab.active::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: -1px;
+  height: 2px;
+  background: #1E1E1E;
+  border-radius: 1px 1px 0 0;
+}
+
+/* ─── Tab Actions ─── */
+.tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #EBEBEB;
+  flex-shrink: 0;
+}
+
+.tab-actions-spacer {
+  flex: 1;
+}
+
+/* ─── Result Summary ─── */
+.result-summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  font-size: 10px;
+  color: #888;
+  background: #FAFAFA;
+  border-bottom: 1px solid #EBEBEB;
+  flex-shrink: 0;
+}
+
+.result-summary strong {
+  color: #1E1E1E;
+  font-weight: 700;
+}
+
+/* ─── Key Name ─── */
+.key-name {
+  display: block;
+  font-family: 'Roboto Mono', 'SF Mono', 'Consolas', monospace;
+  font-size: 10px;
+  font-weight: 500;
+  color: #1E1E1E;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Bulk (JSON) ─── */
+.bulk-editor {
+  padding: 8px 12px 0;
+  border-bottom: 1px solid #EBEBEB;
+  background: #FAFAFA;
+  flex-shrink: 0;
+}
+
+.bulk-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #E0E0E0;
+  border-radius: 6px;
+  font-family: 'Roboto Mono', 'SF Mono', 'Consolas', monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  color: #1E1E1E;
+  background: #FFFFFF;
+  outline: none;
+  resize: vertical;
+  transition: all 0.12s;
+}
+
+.bulk-input:focus {
+  border-color: #0C8CE9;
+  box-shadow: 0 0 0 2px rgba(12, 140, 233, 0.1);
+}
+
+.bulk-editor .tab-actions {
+  padding: 8px 0;
+  border-bottom: none;
+}
+
+.bulk-error {
+  margin-top: 6px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: #FEF2F2;
+  color: #B91C1C;
+  font-size: 10px;
+  word-break: break-all;
+}
+
+.bulk-value {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #444;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ─── Filter Bar ─── */
 .filter-bar {
   display: flex;

@@ -8,6 +8,20 @@ export type { SyncResultItem, SyncResponse } from "./sync";
 export type { CachedKey, MatchResult, MatchOptions } from "./matching";
 
 export type {
+  KeyEntry,
+  KeyFindResponse,
+  KeyLookupRequest,
+  KeyLookupResponse,
+  KeyUpdateRequest,
+  KeyUpdateResponse,
+  BulkKeyMode,
+  BulkKeyItem,
+  BulkKeysRequest,
+  BulkKeyResult,
+  BulkKeysResponse,
+} from "./keys";
+
+export type {
   I18nPluginData,
   CacheStatusResponse,
   CacheRefreshResponse,

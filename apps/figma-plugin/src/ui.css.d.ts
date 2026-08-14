@@ -14,6 +14,10 @@ declare const styles: {
   readonly "btn-primary": string;
   readonly "btn-secondary": string;
   readonly "btn-sm": string;
+  readonly "bulk-editor": string;
+  readonly "bulk-error": string;
+  readonly "bulk-input": string;
+  readonly "bulk-value": string;
   readonly "cache-status": string;
   readonly "candidate-item": string;
   readonly "candidate-key": string;
@@ -32,6 +36,7 @@ declare const styles: {
   readonly "group-select-divider": string;
   readonly "key-input": string;
   readonly "key-input-group": string;
+  readonly "key-name": string;
   readonly "loading-spinner": string;
   readonly "mapping-info": string;
   readonly "mapping-key-row": string;
@@ -46,6 +51,7 @@ declare const styles: {
   readonly "project-selector-label": string;
   readonly "project-tab": string;
   readonly "project-toggle": string;
+  readonly "result-summary": string;
   readonly "search-bar": string;
   readonly "search-input": string;
   readonly "settings-input": string;
@@ -56,6 +62,10 @@ declare const styles: {
   readonly "state-icon": string;
   readonly "state-message": string;
   readonly "state-view": string;
+  readonly "tab": string;
+  readonly "tab-actions": string;
+  readonly "tab-actions-spacer": string;
+  readonly "tab-bar": string;
   readonly "toolbar": string;
   readonly "toolbar-actions": string;
   readonly "toolbar-title": string;
