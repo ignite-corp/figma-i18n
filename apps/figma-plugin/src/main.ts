@@ -1,6 +1,7 @@
 import { on, showUI, emit } from "@create-figma-plugin/utilities";
 import { scanSelection } from "./scanner";
 import { readPluginData, writePluginData } from "./plugin-data";
+import { applyTextsByKey, type TextApplyItem } from "./text-applier";
 import type { I18nPluginData } from "shared-types";
 
 export default function () {
@@ -24,6 +25,11 @@ export default function () {
       }
     }
     emit("BULK_SAVE_DONE");
+  });
+
+  on("APPLY_TEXTS", async (items: TextApplyItem[]) => {
+    const result = await applyTextsByKey(items);
+    emit("APPLY_TEXTS_DONE", result);
   });
 
   on("READ_PLUGIN_DATA", (payload: { nodeId: string }) => {

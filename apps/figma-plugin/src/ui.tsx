@@ -112,6 +112,13 @@ on("BULK_SAVE_DONE", () => {
   showNotify("pluginData 저장 완료!");
 });
 
+on("APPLY_TEXTS_DONE", (result: { updated: number; failed: number; notFound: string[] }) => {
+  if (result.updated === 0 && result.failed === 0) return;
+  const parts = [`Figma 텍스트 ${result.updated}개 반영`];
+  if (result.failed > 0) parts.push(`${result.failed}개 실패`);
+  showNotify(parts.join(", "));
+});
+
 // ─── Scan logic ───
 async function handleScanResult() {
   if (extractedNodes.length === 0) {
@@ -402,6 +409,8 @@ async function handleKeySave(keyName: string, rawValue: string, force = false) {
       keyEdits.delete(keyName);
       keyConflicts.delete(keyName);
       showNotify(`업데이트 완료: ${keyName}`);
+      // 이 key에 연결된 현재 페이지의 텍스트 노드도 함께 갱신
+      emit("APPLY_TEXTS", [{ keyName, value: toDisplayValue(value) }]);
     }
   } catch (err) {
     showNotify(`업데이트 실패: ${err instanceof Error ? err.message : err}`);
@@ -519,12 +528,19 @@ async function handleBulkApply() {
     );
 
     // 성공한 항목은 반영 완료 상태로 전환
+    const appliedTexts = bulkEntries
+      .filter((e) => succeeded.has(e.keyName))
+      .map((e) => ({ keyName: e.keyName, value: toDisplayValue(e.value) }));
+
     bulkEntries = bulkEntries.map((e) =>
       succeeded.has(e.keyName)
         ? { ...e, status: "same", currentValue: e.value }
         : e,
     );
     succeeded.forEach((keyName) => bulkChecked.delete(keyName));
+
+    // 연결된 현재 페이지의 텍스트 노드도 함께 갱신
+    if (appliedTexts.length > 0) emit("APPLY_TEXTS", appliedTexts);
 
     showNotify(
       `반영 완료: ${response.summary.succeeded}건 성공, ${response.summary.failed}건 실패`,
