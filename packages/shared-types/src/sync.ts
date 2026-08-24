@@ -24,6 +24,8 @@ export interface SyncRequest {
   triggeredBy: string;
   items: SyncItem[];
   projectId?: string;
+  /** 신규 생성 key에 추가로 붙일 Lokalise 태그 (figma-sync는 항상 포함) */
+  tags?: string[];
 }
 
 export interface SyncResultItem {

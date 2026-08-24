@@ -4,6 +4,7 @@ import { loadConfig, resolveProjectId } from "../config";
 import { getLokaliseClient } from "./cache";
 import { translateEnToFr, isEnglishLocale, isFrenchLocale } from "./translation";
 import { logger } from "../lib/logger";
+import { buildKeyTags } from "./tags";
 
 const config = loadConfig();
 
@@ -159,6 +160,7 @@ export async function bulkUpsertKeys(input: {
   projectKey?: string;
   figmaFileId?: string;
   triggeredBy?: string;
+  tags?: string[];
 }): Promise<BulkKeyResult[]> {
   const projectId = resolveProjectId(config, input.projectKey);
   const lokalise = getLokaliseClient(input.projectKey);
@@ -225,7 +227,14 @@ export async function bulkUpsertKeys(input: {
 
   if (creates.length > 0) {
     results.push(
-      ...(await runCreates(creates, projectId, lokalise, buildTranslations, input)),
+      ...(await runCreates(
+        creates,
+        projectId,
+        lokalise,
+        buildTranslations,
+        input,
+        buildKeyTags(input.tags),
+      )),
     );
   }
 
@@ -308,6 +317,7 @@ async function runCreates(
   lokalise: ReturnType<typeof getLokaliseClient>,
   buildTranslations: TranslationBuilder,
   input: { figmaFileId?: string; triggeredBy?: string },
+  tags: string[],
 ): Promise<BulkKeyResult[]> {
   try {
     const response = await lokalise.createKeys({
@@ -318,7 +328,7 @@ async function runCreates(
           language_iso: t.language_iso,
           translation: t.translation,
         })),
-        tags: ["figma-sync"],
+        tags,
       })),
     });
 
@@ -349,7 +359,7 @@ async function runCreates(
           keyName: item.keyName,
           baseValue: item.value,
           platforms: ["web"],
-          tags: ["figma-sync"],
+          tags,
           fetchedAt: new Date(),
         },
       });

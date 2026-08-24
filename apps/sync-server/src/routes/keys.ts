@@ -52,6 +52,7 @@ const bulkBodySchema = z.object({
   projectId: z.string().optional(),
   figmaFileId: z.string().optional(),
   triggeredBy: z.string().optional(),
+  tags: z.array(z.string()).max(20).optional(),
 });
 
 export const keysRoutes: FastifyPluginAsync = async (app) => {
@@ -115,6 +116,7 @@ export const keysRoutes: FastifyPluginAsync = async (app) => {
       projectKey: body.projectId,
       figmaFileId: body.figmaFileId,
       triggeredBy: body.triggeredBy,
+      tags: body.tags,
     });
 
     const succeeded = results.filter((r) => r.success).length;

@@ -92,6 +92,9 @@ const ANNOTATION_CATEGORY_IDS = ["14539:0", "12208:0"];
 // Lokalise 프로젝트 선택 (FO / BO)
 let selectedProject: "dealer-fo" | "dealer-bo" = "dealer-fo";
 
+// 신규 key 생성 시 붙일 Lokalise 태그 (쉼표 구분 입력)
+let tagInput = "";
+
 const HCHAT_FR_LOCALES = ["fr", "fr_CA"];
 
 // ─── Plugin message handling ───
@@ -300,6 +303,7 @@ async function handleSync() {
       triggeredBy: "unknown",
       items,
       projectId: selectedProject,
+      tags: parseTags(tagInput),
     });
 
     if (pluginDataUpdates.length > 0) {
@@ -535,6 +539,7 @@ async function handleBulkApply() {
       projectId: selectedProject,
       figmaFileId: figmaFileKey || undefined,
       triggeredBy: "plugin",
+      tags: parseTags(tagInput),
     });
 
     bulkResults = response.results;
@@ -576,6 +581,7 @@ function render() {
   root.innerHTML = `
     <div class="container">
       ${renderProjectSelector()}
+      ${renderTagInput()}
       ${renderCacheStatus()}
 
       <div class="toolbar">
@@ -628,6 +634,16 @@ function renderProjectSelector(): string {
         <button class="project-tab ${selectedProject === "dealer-fo" ? "active" : ""}" data-project="dealer-fo">FO</button>
         <button class="project-tab ${selectedProject === "dealer-bo" ? "active" : ""}" data-project="dealer-bo">BO</button>
       </div>
+    </div>
+  `;
+}
+
+function renderTagInput(): string {
+  return `
+    <div class="tag-bar">
+      <span class="project-selector-label">Tags</span>
+      <input type="text" class="settings-input" id="tag-input"
+        placeholder="쉼표로 구분 (예: release-2.5, dealer)" value="${escapeHtml(tagInput)}" />
     </div>
   `;
 }
@@ -992,6 +1008,11 @@ function setLoading(loading: boolean) {
 
 // ─── Event Binding ───
 function bindEvents() {
+  // 입력 중에는 렌더하지 않고 state만 갱신 (포커스 유지)
+  document.getElementById("tag-input")?.addEventListener("input", (e) => {
+    tagInput = (e.target as HTMLInputElement).value;
+  });
+
   document.querySelectorAll("[data-project]").forEach((el) => {
     el.addEventListener("click", () => {
       selectedProject = (el as HTMLElement).dataset.project as "dealer-fo" | "dealer-bo";
@@ -1203,6 +1224,14 @@ function bindBulkEvents() {
 }
 
 // ─── Helpers ───
+/** 쉼표로 구분된 태그 입력을 배열로 변환 */
+function parseTags(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
 function showNotify(message: string) {
   emit("NOTIFY", { message });
 }

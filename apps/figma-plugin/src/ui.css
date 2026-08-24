@@ -73,6 +73,21 @@ body {
   color: #444;
 }
 
+/* ─── Tag Input ─── */
+.tag-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #EBEBEB;
+  background: #FAFAFA;
+}
+
+.tag-bar .settings-input {
+  height: 24px;
+  font-size: 11px;
+}
+
 /* ─── Cache Status ─── */
 .cache-status {
   padding: 4px 12px;

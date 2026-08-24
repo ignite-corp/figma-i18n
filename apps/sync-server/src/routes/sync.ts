@@ -7,6 +7,7 @@ const syncBodySchema = z.object({
   figmaFileId: z.string().min(1),
   triggeredBy: z.string().min(1),
   projectId: z.string().optional(),
+  tags: z.array(z.string()).max(20).optional(),
   items: z.array(
     z.object({
       nodeId: z.string(),
@@ -29,6 +30,7 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
       body.triggeredBy,
       body.items,
       body.projectId,
+      body.tags,
     );
 
     const succeeded = results.filter((r) => r.success).length;

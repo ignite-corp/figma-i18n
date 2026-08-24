@@ -69,6 +69,7 @@ declare const styles: {
   readonly "tab-actions": string;
   readonly "tab-actions-spacer": string;
   readonly "tab-bar": string;
+  readonly "tag-bar": string;
   readonly "toolbar": string;
   readonly "toolbar-actions": string;
   readonly "toolbar-title": string;

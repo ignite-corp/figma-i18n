@@ -4,6 +4,7 @@ import { loadConfig, resolveProjectId } from "../config";
 import { getLokaliseClient } from "./cache";
 import { logger } from "../lib/logger";
 import { isFrenchLocale, isEnglishLocale } from "./translation";
+import { buildKeyTags } from "./tags";
 
 const config = loadConfig();
 
@@ -13,8 +14,10 @@ export async function processSyncItems(
   triggeredBy: string,
   items: SyncItem[],
   projectKey?: string,
+  userTags?: string[],
 ): Promise<SyncResultItem[]> {
   const projectId = resolveProjectId(config, projectKey);
+  const tags = buildKeyTags(userTags);
   const lokalise = getLokaliseClient(projectKey);
   const results: SyncResultItem[] = [];
 
@@ -32,7 +35,7 @@ export async function processSyncItems(
   for (const item of items) {
     try {
       const result = await processSingleItem(
-        figmaFileId, triggeredBy, item, projectId, lokalise, targetLanguages,
+        figmaFileId, triggeredBy, item, projectId, lokalise, targetLanguages, tags,
       );
       results.push(result);
     } catch (err) {
@@ -79,6 +82,7 @@ async function processSingleItem(
   projectId: string,
   lokalise: ReturnType<typeof getLokaliseClient>,
   targetLanguages: string[],
+  tags: string[],
 ): Promise<SyncResultItem> {
   switch (item.action) {
     case "create_new": {
@@ -98,7 +102,7 @@ async function processSingleItem(
             key_name: item.keyName,
             platforms: ["web"],
             translations,
-            tags: ["figma-sync"],
+            tags,
           },
         ],
       });
@@ -139,7 +143,7 @@ async function processSingleItem(
             keyName: item.keyName,
             baseValue: sourceText,
             platforms: ["web"],
-            tags: ["figma-sync"],
+            tags,
             fetchedAt: new Date(),
           },
         });
