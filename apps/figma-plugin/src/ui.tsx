@@ -66,7 +66,7 @@ let keySearched = false;
 let isKeySearching = false;
 // 이름이 같은 key가 여러 건 있을 수 있어 행 식별은 keyName이 아닌 lokaliseKeyId로 한다
 let savingKeyId: number | null = null;
-// 사용자가 수정 중인 값 (lokaliseKeyId → 저장 형식 value)
+// 사용자가 수정 중인 값 (lokaliseKeyId → value)
 const keyEdits: Map<number, string> = new Map();
 // Lokalise에서 이미 변경되어 저장이 보류된 key
 const keyConflicts: Set<number> = new Set();
@@ -326,7 +326,7 @@ async function handleSync() {
       )
       .map((item) => ({
         nodeId: item.nodeId,
-        value: toDisplayValue(userValues.get(item.nodeId)!),
+        value: userValues.get(item.nodeId)!,
       }));
     if (appliedTexts.length > 0) emit("APPLY_NODE_TEXTS", appliedTexts);
 
@@ -393,10 +393,9 @@ async function handleKeySearch() {
   }
 }
 
-async function handleKeySave(lokaliseKeyId: number, rawValue: string, force = false) {
+async function handleKeySave(lokaliseKeyId: number, value: string, force = false) {
   if (savingKeyId !== null) return;
 
-  const value = toStoredValue(rawValue);
   const target = keyResults.find((k) => k.lokaliseKeyId === lokaliseKeyId);
   if (!target) return;
   if (target.baseValue === value) {
@@ -436,7 +435,7 @@ async function handleKeySave(lokaliseKeyId: number, rawValue: string, force = fa
       keyConflicts.delete(lokaliseKeyId);
       showNotify(`업데이트 완료: ${keyName}`);
       // 이 key에 연결된 현재 페이지의 텍스트 노드도 함께 갱신
-      emit("APPLY_TEXTS", [{ keyName, value: toDisplayValue(value) }]);
+      emit("APPLY_TEXTS", [{ keyName, value }]);
     }
   } catch (err) {
     showNotify(`업데이트 실패: ${err instanceof Error ? err.message : err}`);
@@ -498,8 +497,7 @@ async function handleBulkCheck() {
     });
     const existing = new Map(response.found.map((k) => [k.keyName, k.baseValue]));
 
-    bulkEntries = parsed.entries.map(([keyName, rawValue]) => {
-      const value = toStoredValue(rawValue);
+    bulkEntries = parsed.entries.map(([keyName, value]) => {
       const currentValue = existing.has(keyName) ? existing.get(keyName)! : null;
       const status: BulkStatus =
         currentValue === null ? "new" : currentValue === value ? "same" : "changed";
@@ -557,7 +555,7 @@ async function handleBulkApply() {
     // 성공한 항목은 반영 완료 상태로 전환
     const appliedTexts = bulkEntries
       .filter((e) => succeeded.has(e.keyName))
-      .map((e) => ({ keyName: e.keyName, value: toDisplayValue(e.value) }));
+      .map((e) => ({ keyName: e.keyName, value: e.value }));
 
     bulkEntries = bulkEntries.map((e) =>
       succeeded.has(e.keyName)
@@ -817,7 +815,7 @@ function renderExistingMapping(result: ScanResultNode): string {
       ${(result.status === "changed" || result.status === "matched") && !isDeleteAction && !isCreateNewAction
         ? `<div class="value-input-group">
             <label class="value-label">Value</label>
-            <textarea class="value-input" data-value-input="${result.nodeId}" placeholder="번역 텍스트" rows="2">${escapeHtml(toDisplayValue(currentValue))}</textarea>
+            <textarea class="value-input" data-value-input="${result.nodeId}" placeholder="번역 텍스트" rows="2">${escapeHtml(currentValue)}</textarea>
           </div>`
         : ""}
     </div>
@@ -857,7 +855,7 @@ function renderNewKeyInput(result: ScanResultNode): string {
     </div>
     <div class="value-input-group">
       <label class="value-label">Value</label>
-      <textarea class="value-input" data-value-input="${result.nodeId}" placeholder="번역 텍스트" rows="2">${escapeHtml(toDisplayValue(currentValue))}</textarea>
+      <textarea class="value-input" data-value-input="${result.nodeId}" placeholder="번역 텍스트" rows="2">${escapeHtml(currentValue)}</textarea>
     </div>
   `;
 }
@@ -917,12 +915,12 @@ function renderKeyItem(key: KeyEntry): string {
       ${conflict
         ? `<div class="conflict-notice">
             ⚠️ Lokalise에서 이미 수정된 key입니다. 저장하지 않았습니다.
-            <div class="conflict-current">최신 값: "${escapeHtml(toDisplayValue(key.baseValue))}"</div>
+            <div class="conflict-current">최신 값: "${escapeHtml(key.baseValue)}"</div>
             <button class="btn btn-sm btn-ghost" data-action="use-latest">최신 값 가져오기</button>
           </div>`
         : ""}
       <div class="value-input-group">
-        <textarea class="value-input" data-key-value placeholder="번역 텍스트" rows="2">${escapeHtml(toDisplayValue(value))}</textarea>
+        <textarea class="value-input" data-key-value placeholder="번역 텍스트" rows="2">${escapeHtml(value)}</textarea>
       </div>
     </div>
   `;
@@ -997,9 +995,9 @@ function renderBulkItem(entry: BulkEntry, index: number): string {
         </label>
       </div>
       <code class="key-name">${escapeHtml(entry.keyName)}</code>
-      <div class="bulk-value">${escapeHtml(toDisplayValue(entry.value))}</div>
+      <div class="bulk-value">${escapeHtml(entry.value)}</div>
       ${entry.status === "changed"
-        ? `<div class="changed-diff">기존: "${escapeHtml(toDisplayValue(entry.currentValue ?? ""))}"</div>`
+        ? `<div class="changed-diff">기존: "${escapeHtml(entry.currentValue ?? "")}"</div>`
         : ""}
       ${failure ? `<div class="bulk-error">실패: ${escapeHtml(failure.error ?? "알 수 없는 오류")}</div>` : ""}
     </div>
@@ -1163,7 +1161,7 @@ function bindScanEvents() {
   document.querySelectorAll("[data-value-input]").forEach((el) => {
     el.addEventListener("input", (e) => {
       const nodeId = (el as HTMLElement).dataset.valueInput!;
-      userValues.set(nodeId, toStoredValue((e.target as HTMLInputElement).value));
+      userValues.set(nodeId, (e.target as HTMLInputElement).value);
     });
   });
 }
@@ -1187,7 +1185,7 @@ function bindKeysEvents() {
     el.addEventListener("input", (e) => {
       const keyId = closestKeyId(el as HTMLElement);
       if (keyId === null) return;
-      keyEdits.set(keyId, toStoredValue((e.target as HTMLTextAreaElement).value));
+      keyEdits.set(keyId, (e.target as HTMLTextAreaElement).value);
     });
   });
 
@@ -1279,17 +1277,9 @@ function escapeHtml(str: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-/** 저장된 `\n` 리터럴을 실제 개행으로 (표시용) */
-function toDisplayValue(value: string): string {
-  return value.replace(/\\n/g, "\n");
-}
-
-/** 실제 개행을 `\n` 리터럴로 (저장용) */
-function toStoredValue(value: string): string {
-  return value.replace(/\n/g, "\\n");
+    .replace(/"/g, "&quot;")
+    // HTML 파서는 <textarea> 직후의 개행을 무시하므로, 개행으로 시작하는 값이 유실된다
+    .replace(/\n/g, "&#10;");
 }
 
 function statusLabel(status: NodeStatus): string {
