@@ -24,6 +24,8 @@ export interface KeyUpdateRequest {
   keyName: string;
   value: string;
   projectId?: string;
+  /** 수정 대상 key_id. 이름이 같은 key가 여러 건일 때 대상을 특정하기 위해 보낸다 */
+  lokaliseKeyId?: number;
   figmaFileId?: string;
   triggeredBy?: string;
   /** 사용자가 화면에서 보고 있던 값. Lokalise 최신 값과 다르면 충돌로 처리 */

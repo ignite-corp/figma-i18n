@@ -201,9 +201,18 @@ async function processSingleItem(
       const sourceText = item.value ?? item.text;
 
       // Lokalise key ID 찾기 (캐시에서)
-      const cached = await prisma.lokaliseKeyCache.findFirst({
+      const cachedRows = await prisma.lokaliseKeyCache.findMany({
         where: { keyName: item.keyName, projectId },
       });
+
+      // 이름이 같은 key가 여러 건이면 임의로 고르지 않는다 (엉뚱한 key를 덮어쓰는 것보다 낫다)
+      if (cachedRows.length > 1) {
+        throw new Error(
+          `Lokalise에 이름이 같은 key가 ${cachedRows.length}건 있어 대상을 특정할 수 없습니다 ` +
+            `(key_id: ${cachedRows.map((r) => r.lokaliseKeyId).join(", ")}): ${item.keyName}`,
+        );
+      }
+      const cached = cachedRows[0];
 
       if (cached) {
         const translations = buildTranslations(
@@ -211,7 +220,7 @@ async function processSingleItem(
         );
         const targetOnlyTranslations = translations
           .filter((t) => t.language_iso !== lokalise.baseLanguage)
-          .map((t) => ({ ...t, is_fuzzy: isFrenchLocale(t.language_iso) }));
+          .map((t) => ({ ...t, is_unverified: isFrenchLocale(t.language_iso) }));
 
         await lokalise.updateKeyTranslation(cached.lokaliseKeyId, {
           translations: targetOnlyTranslations,

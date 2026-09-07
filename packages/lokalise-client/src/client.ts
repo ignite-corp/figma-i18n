@@ -89,23 +89,33 @@ export class LokaliseClient {
     );
   }
 
-  /** key의 translation 업데이트 */
+  /**
+   * key의 translation 업데이트.
+   * 단건 엔드포인트(PUT /keys/{key_id})는 translations를 받지 않고 조용히 무시한 뒤 200을 돌려주므로,
+   * translations를 실제로 반영하는 multi-update(PUT /keys)를 사용한다.
+   */
   async updateKeyTranslation(
     keyId: number,
     payload: LokaliseUpdateKeyPayload,
   ): Promise<void> {
-    // Lokalise API: translation은 key가 아닌 translation ID로 업데이트
-    // 먼저 key의 translation 목록에서 해당 언어의 translation_id를 찾아야 함
-    // 여기서는 key update 방식으로 처리
-    await this.request(
-      `/projects/${this.projectId}/keys/${keyId}`,
+    const response = await this.request<LokaliseKeysResponse>(
+      `/projects/${this.projectId}/keys`,
       {
         method: "PUT",
         body: JSON.stringify({
-          translations: payload.translations,
+          keys: [{ key_id: keyId, translations: payload.translations }],
         }),
       },
     );
+
+    // multi-update는 부분 실패도 200으로 돌려주므로 응답을 직접 확인해야 한다
+    const error = response.errors?.[0];
+    if (error) {
+      throw new Error(`Lokalise key 업데이트 실패 (key_id ${keyId}): ${error.message}`);
+    }
+    if (!response.keys.some((k) => k.key_id === keyId)) {
+      throw new Error(`Lokalise가 key를 갱신하지 않았습니다 (key_id ${keyId})`);
+    }
   }
 
   /** 프로젝트에 정의된 언어 목록 조회 */

@@ -70,7 +70,7 @@ export async function lookupKeys(
   const live = await fetchLiveValues(lokalise, keyNames);
   await syncCacheFromLive(projectId, live);
 
-  return [...live.values()];
+  return [...live.values()].flat();
 }
 
 /** 단일 key의 value 업데이트 (전 언어 반영, FR 계열은 자동 번역) */
@@ -78,6 +78,7 @@ export async function updateKeyValue(input: {
   keyName: string;
   value: string;
   projectKey?: string;
+  lokaliseKeyId?: number;
   figmaFileId?: string;
   triggeredBy?: string;
   expectedValue?: string;
@@ -86,20 +87,24 @@ export async function updateKeyValue(input: {
   const projectId = resolveProjectId(config, input.projectKey);
   const lokalise = getLokaliseClient(input.projectKey);
 
-  // 쓰기 직전 Lokalise 최신 값과 대조 (사용자가 본 값이 옛날 값이면 덮어쓰기 방지)
-  if (input.expectedValue !== undefined && !input.force) {
-    const live = await fetchLiveValues(lokalise, [input.keyName]);
-    await syncCacheFromLive(projectId, live);
+  // 대상 key_id와 최신 값을 Lokalise에서 직접 확정한다.
+  // 캐시에는 이름이 같은 key가 여러 건 있을 수 있어 캐시 조회로는 대상을 특정할 수 없다.
+  const live = await fetchLiveValues(lokalise, [input.keyName]);
+  await syncCacheFromLive(projectId, live);
 
-    const current = live.get(input.keyName);
-    if (!current) throw new Error(`Lokalise에 없는 key입니다: ${input.keyName}`);
-    if (current.baseValue !== input.expectedValue) {
-      logger.info(
-        { keyName: input.keyName },
-        "Lokalise 최신 값과 달라 업데이트를 보류함",
-      );
-      return { status: "conflict", key: current };
-    }
+  const target = resolveLiveKey(live, input.keyName, input.lokaliseKeyId);
+
+  // 사용자가 본 값이 옛날 값이면 덮어쓰기 방지
+  if (
+    input.expectedValue !== undefined &&
+    !input.force &&
+    target.baseValue !== input.expectedValue
+  ) {
+    logger.info(
+      { keyName: input.keyName },
+      "Lokalise 최신 값과 달라 업데이트를 보류함",
+    );
+    return { status: "conflict", key: target };
   }
 
   const buildTranslations = await createTranslationBuilder(lokalise, {
@@ -107,10 +112,13 @@ export async function updateKeyValue(input: {
   });
 
   const key = await applyKeyUpdate({
-    ...input,
+    target,
+    value: input.value,
     projectId,
     lokalise,
     buildTranslations,
+    figmaFileId: input.figmaFileId,
+    triggeredBy: input.triggeredBy,
   });
 
   return { status: "updated", key };
@@ -118,7 +126,7 @@ export async function updateKeyValue(input: {
 
 /** 번역 배열이 이미 준비된 상태에서 실제 업데이트를 수행 */
 async function applyKeyUpdate(input: {
-  keyName: string;
+  target: KeyEntry;
   value: string;
   projectId: string;
   lokalise: ReturnType<typeof getLokaliseClient>;
@@ -126,32 +134,29 @@ async function applyKeyUpdate(input: {
   figmaFileId?: string;
   triggeredBy?: string;
 }): Promise<KeyEntry> {
-  const { keyName, value, projectId } = input;
+  const { target, value, projectId } = input;
 
-  const cached = await prisma.lokaliseKeyCache.findFirst({
-    where: { keyName, projectId },
-  });
-  if (!cached) throw new Error(`캐시에 없는 key입니다: ${keyName}`);
-
-  await input.lokalise.updateKeyTranslation(cached.lokaliseKeyId, {
-    translations: input.buildTranslations(keyName, value),
+  await input.lokalise.updateKeyTranslation(target.lokaliseKeyId, {
+    translations: input.buildTranslations(target.keyName, value),
   });
 
   await prisma.lokaliseKeyCache.update({
-    where: { projectId_lokaliseKeyId: { projectId, lokaliseKeyId: cached.lokaliseKeyId } },
+    where: {
+      projectId_lokaliseKeyId: { projectId, lokaliseKeyId: target.lokaliseKeyId },
+    },
     data: { baseValue: value, fetchedAt: new Date() },
   });
 
   await recordKeyHistory({
     figmaFileId: input.figmaFileId,
-    keyName,
+    keyName: target.keyName,
     action: "SOURCE_UPDATED",
-    prevValue: cached.baseValue,
+    prevValue: target.baseValue,
     newValue: value,
     triggeredBy: input.triggeredBy,
   });
 
-  return { lokaliseKeyId: cached.lokaliseKeyId, keyName, baseValue: value };
+  return { lokaliseKeyId: target.lokaliseKeyId, keyName: target.keyName, baseValue: value };
 }
 
 /** JSON 대량 반영 — create는 한 번의 배치 요청, update는 건별 요청 */
@@ -174,13 +179,13 @@ export async function bulkUpsertKeys(input: {
 
   const results: BulkKeyResult[] = [];
   const creates: BulkKeyItem[] = [];
-  const updates: BulkKeyItem[] = [];
+  const updates: Array<{ item: BulkKeyItem; target: KeyEntry }> = [];
 
   for (const item of input.items) {
-    const current = live.get(item.keyName);
+    const candidates = live.get(item.keyName) ?? [];
 
     if (item.mode === "create") {
-      if (current) {
+      if (candidates.length > 0) {
         results.push({
           keyName: item.keyName,
           mode: "create",
@@ -194,7 +199,7 @@ export async function bulkUpsertKeys(input: {
       continue;
     }
 
-    if (!current) {
+    if (candidates.length === 0) {
       results.push({
         keyName: item.keyName,
         mode: "update",
@@ -204,17 +209,32 @@ export async function bulkUpsertKeys(input: {
       });
       continue;
     }
-    if (item.expectedValue !== undefined && current.baseValue !== item.expectedValue) {
+
+    let target: KeyEntry;
+    try {
+      target = resolveLiveKey(live, item.keyName);
+    } catch (err) {
       results.push({
         keyName: item.keyName,
         mode: "update",
         success: false,
         conflict: true,
-        error: `Lokalise에서 이미 변경된 값입니다 (현재: "${current.baseValue}") — 미리보기를 다시 실행해주세요`,
+        error: err instanceof Error ? err.message : "대상 key를 특정할 수 없습니다",
       });
       continue;
     }
-    updates.push(item);
+
+    if (item.expectedValue !== undefined && target.baseValue !== item.expectedValue) {
+      results.push({
+        keyName: item.keyName,
+        mode: "update",
+        success: false,
+        conflict: true,
+        error: `Lokalise에서 이미 변경된 값입니다 (현재: "${target.baseValue}") — 미리보기를 다시 실행해주세요`,
+      });
+      continue;
+    }
+    updates.push({ item, target });
   }
 
   if (creates.length === 0 && updates.length === 0) return results;
@@ -222,7 +242,9 @@ export async function bulkUpsertKeys(input: {
   // 번역은 실제로 반영할 항목만 한 번에 배치 처리
   const buildTranslations = await createTranslationBuilder(
     lokalise,
-    Object.fromEntries([...creates, ...updates].map((i) => [i.keyName, i.value])),
+    Object.fromEntries(
+      [...creates, ...updates.map((u) => u.item)].map((i) => [i.keyName, i.value]),
+    ),
   );
 
   if (creates.length > 0) {
@@ -238,10 +260,10 @@ export async function bulkUpsertKeys(input: {
     );
   }
 
-  for (const item of updates) {
+  for (const { item, target } of updates) {
     try {
       await applyKeyUpdate({
-        keyName: item.keyName,
+        target,
         value: item.value,
         projectId,
         lokalise,
@@ -264,13 +286,16 @@ export async function bulkUpsertKeys(input: {
   return results;
 }
 
-/** Lokalise에서 해당 key들의 현재 값을 조회 (이름 기준, 청크 단위) */
+/**
+ * Lokalise에서 해당 key들의 현재 값을 조회 (이름 기준, 청크 단위).
+ * Lokalise는 이름이 같은 key를 여러 건 가질 수 있으므로 이름당 배열로 반환한다.
+ */
 async function fetchLiveValues(
   lokalise: ReturnType<typeof getLokaliseClient>,
   keyNames: string[],
-): Promise<Map<string, KeyEntry>> {
+): Promise<Map<string, KeyEntry[]>> {
   const unique = [...new Set(keyNames)];
-  const found = new Map<string, KeyEntry>();
+  const found = new Map<string, KeyEntry[]>();
 
   for (let i = 0; i < unique.length; i += LIVE_LOOKUP_CHUNK_SIZE) {
     const chunk = unique.slice(i, i + LIVE_LOOKUP_CHUNK_SIZE);
@@ -280,22 +305,58 @@ async function fetchLiveValues(
       const keyName = key.key_name.web || key.key_name.other;
       // filter_keys가 부분 일치를 반환할 수 있으므로 이름이 정확히 같은 것만 사용
       if (!chunk.includes(keyName)) continue;
-      found.set(keyName, {
+      const entry: KeyEntry = {
         lokaliseKeyId: key.key_id,
         keyName,
         baseValue:
           key.translations.find((t) => t.language_iso === lokalise.baseLanguage)
             ?.translation ?? "",
-      });
+      };
+      const existing = found.get(keyName);
+      if (existing) existing.push(entry);
+      else found.set(keyName, [entry]);
     }
   }
 
   return found;
 }
 
+/**
+ * 실시간 조회 결과에서 수정 대상 key 하나를 확정한다.
+ * lokaliseKeyId가 주어지면 그 key를, 없으면 이름이 유일할 때만 사용한다.
+ * 동명 key가 여러 건인데 id가 없으면 임의로 고르지 않고 실패시킨다 (엉뚱한 key를 덮어쓰는 것보다 낫다).
+ */
+function resolveLiveKey(
+  live: Map<string, KeyEntry[]>,
+  keyName: string,
+  lokaliseKeyId?: number,
+): KeyEntry {
+  const candidates = live.get(keyName) ?? [];
+  if (candidates.length === 0) throw new Error(`Lokalise에 없는 key입니다: ${keyName}`);
+
+  if (lokaliseKeyId !== undefined) {
+    const target = candidates.find((c) => c.lokaliseKeyId === lokaliseKeyId);
+    if (!target) {
+      throw new Error(
+        `Lokalise에서 교체된 key입니다 (key_id ${lokaliseKeyId} 없음) — 다시 검색해주세요: ${keyName}`,
+      );
+    }
+    return target;
+  }
+
+  if (candidates.length > 1) {
+    throw new Error(
+      `Lokalise에 이름이 같은 key가 ${candidates.length}건 있어 대상을 특정할 수 없습니다 ` +
+        `(key_id: ${candidates.map((c) => c.lokaliseKeyId).join(", ")}): ${keyName}`,
+    );
+  }
+
+  return candidates[0]!;
+}
+
 /** 실시간 조회 결과를 캐시에 반영 */
-async function syncCacheFromLive(projectId: string, live: Map<string, KeyEntry>) {
-  for (const key of live.values()) {
+async function syncCacheFromLive(projectId: string, live: Map<string, KeyEntry[]>) {
+  for (const key of [...live.values()].flat()) {
     await prisma.lokaliseKeyCache.upsert({
       where: { projectId_lokaliseKeyId: { projectId, lokaliseKeyId: key.lokaliseKeyId } },
       update: { keyName: key.keyName, baseValue: key.baseValue, fetchedAt: new Date() },
@@ -324,10 +385,7 @@ async function runCreates(
       keys: creates.map((item) => ({
         key_name: item.keyName,
         platforms: ["web"],
-        translations: buildTranslations(item.keyName, item.value).map((t) => ({
-          language_iso: t.language_iso,
-          translation: t.translation,
-        })),
+        translations: buildTranslations(item.keyName, item.value),
         tags,
       })),
     });
@@ -392,7 +450,7 @@ async function runCreates(
 type TranslationBuilder = (
   keyName: string,
   value: string,
-) => Array<{ language_iso: string; translation: string; is_fuzzy?: boolean }>;
+) => Array<{ language_iso: string; translation: string; is_unverified?: boolean }>;
 
 /**
  * 프로젝트 전 언어에 대한 translation 배열 생성기.
@@ -420,7 +478,7 @@ async function createTranslationBuilder(
       return {
         language_iso: lang,
         translation,
-        ...(translation !== value ? { is_fuzzy: true } : {}),
+        ...(translation !== value ? { is_unverified: true } : {}),
       };
     });
 }

@@ -37,20 +37,20 @@ export interface LokaliseCreateKeyPayload {
   keys: Array<{
     key_name: string;
     platforms: string[];
-    translations: Array<{
-      language_iso: string;
-      translation: string;
-    }>;
+    translations: LokaliseTranslationPayload[];
     tags?: string[];
   }>;
 }
 
 export interface LokaliseUpdateKeyPayload {
-  translations: Array<{
-    language_iso: string;
-    translation: string;
-    is_fuzzy?: boolean;
-  }>;
+  translations: LokaliseTranslationPayload[];
+}
+
+/** 쓰기용 translation 객체. is_fuzzy는 deprecated되어 무시되므로 is_unverified를 사용한다 */
+export interface LokaliseTranslationPayload {
+  language_iso: string;
+  translation: string;
+  is_unverified?: boolean;
 }
 
 export interface LokaliseProjectResponse {

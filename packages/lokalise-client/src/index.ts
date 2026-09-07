@@ -6,6 +6,7 @@ export type {
   LokaliseKeysResponse,
   LokaliseCreateKeyPayload,
   LokaliseUpdateKeyPayload,
+  LokaliseTranslationPayload,
   LokaliseLanguage,
 } from "./types";
 export { RateLimiter } from "./rate-limiter";

@@ -64,11 +64,12 @@ let keyResults: KeyEntry[] = [];
 let keyTotal = 0;
 let keySearched = false;
 let isKeySearching = false;
-let savingKeyName: string | null = null;
-// 사용자가 수정 중인 값 (keyName → 저장 형식 value)
-const keyEdits: Map<string, string> = new Map();
+// 이름이 같은 key가 여러 건 있을 수 있어 행 식별은 keyName이 아닌 lokaliseKeyId로 한다
+let savingKeyId: number | null = null;
+// 사용자가 수정 중인 값 (lokaliseKeyId → 저장 형식 value)
+const keyEdits: Map<number, string> = new Map();
 // Lokalise에서 이미 변경되어 저장이 보류된 key
-const keyConflicts: Set<string> = new Set();
+const keyConflicts: Set<number> = new Set();
 
 // ─── JSON 대량 추가 탭 state ───
 type BulkStatus = "new" | "changed" | "same";
@@ -392,17 +393,19 @@ async function handleKeySearch() {
   }
 }
 
-async function handleKeySave(keyName: string, rawValue: string, force = false) {
-  if (savingKeyName) return;
+async function handleKeySave(lokaliseKeyId: number, rawValue: string, force = false) {
+  if (savingKeyId !== null) return;
 
   const value = toStoredValue(rawValue);
-  const target = keyResults.find((k) => k.keyName === keyName);
-  if (target && target.baseValue === value) {
+  const target = keyResults.find((k) => k.lokaliseKeyId === lokaliseKeyId);
+  if (!target) return;
+  if (target.baseValue === value) {
     showNotify("변경된 내용이 없습니다.");
     return;
   }
 
-  savingKeyName = keyName;
+  const keyName = target.keyName;
+  savingKeyId = lokaliseKeyId;
   render();
 
   try {
@@ -410,23 +413,27 @@ async function handleKeySave(keyName: string, rawValue: string, force = false) {
       keyName,
       value,
       projectId: selectedProject,
+      // 이름이 같은 key가 여러 건일 수 있어 검색 결과의 key_id로 대상을 특정한다
+      lokaliseKeyId,
       figmaFileId: figmaFileKey || undefined,
       triggeredBy: "plugin",
-      expectedValue: target?.baseValue,
+      expectedValue: target.baseValue,
       force,
     });
 
     // 서버가 반환한 값으로 갱신 (conflict면 Lokalise 최신 값)
-    keyResults = keyResults.map((k) => (k.keyName === keyName ? response.key : k));
+    keyResults = keyResults.map((k) =>
+      k.lokaliseKeyId === lokaliseKeyId ? response.key : k,
+    );
 
     if (response.status === "conflict") {
       // 사용자가 입력하던 내용은 유지한 채 최신 값을 보여주고 재확인 받는다
-      keyEdits.set(keyName, value);
-      keyConflicts.add(keyName);
+      keyEdits.set(lokaliseKeyId, value);
+      keyConflicts.add(lokaliseKeyId);
       showNotify(`${keyName}: Lokalise에서 이미 수정된 key입니다. 최신 값을 확인해주세요.`);
     } else {
-      keyEdits.delete(keyName);
-      keyConflicts.delete(keyName);
+      keyEdits.delete(lokaliseKeyId);
+      keyConflicts.delete(lokaliseKeyId);
       showNotify(`업데이트 완료: ${keyName}`);
       // 이 key에 연결된 현재 페이지의 텍스트 노드도 함께 갱신
       emit("APPLY_TEXTS", [{ keyName, value: toDisplayValue(value) }]);
@@ -434,7 +441,7 @@ async function handleKeySave(keyName: string, rawValue: string, force = false) {
   } catch (err) {
     showNotify(`업데이트 실패: ${err instanceof Error ? err.message : err}`);
   } finally {
-    savingKeyName = null;
+    savingKeyId = null;
     render();
   }
 }
@@ -893,17 +900,17 @@ function renderKeysTab(): string {
 }
 
 function renderKeyItem(key: KeyEntry): string {
-  const saving = savingKeyName === key.keyName;
-  const conflict = keyConflicts.has(key.keyName);
-  const edited = keyEdits.get(key.keyName);
+  const saving = savingKeyId === key.lokaliseKeyId;
+  const conflict = keyConflicts.has(key.lokaliseKeyId);
+  const edited = keyEdits.get(key.lokaliseKeyId);
   const value = edited !== undefined ? edited : key.baseValue;
 
   return `
-    <div class="node-item ${conflict ? "node-item--conflict" : ""}" data-key-item="${escapeHtml(key.keyName)}">
+    <div class="node-item ${conflict ? "node-item--conflict" : ""}" data-key-item="${key.lokaliseKeyId}">
       <div class="node-item-header">
         <code class="key-name">${escapeHtml(key.keyName)}</code>
         <button class="btn btn-sm ${conflict ? "btn-danger" : "btn-primary"}" data-action="save-key"
-          ${conflict ? 'data-force="1"' : ""} ${savingKeyName ? "disabled" : ""}>
+          ${conflict ? 'data-force="1"' : ""} ${savingKeyId !== null ? "disabled" : ""}>
           ${saving ? "저장 중..." : conflict ? "덮어쓰기" : "저장"}
         </button>
       </div>
@@ -1178,9 +1185,9 @@ function bindKeysEvents() {
   // 입력 중에는 렌더하지 않고 state만 갱신 (다른 행 저장 시 입력 내용 유실 방지)
   document.querySelectorAll("[data-key-value]").forEach((el) => {
     el.addEventListener("input", (e) => {
-      const item = (el as HTMLElement).closest("[data-key-item]") as HTMLElement | null;
-      if (!item) return;
-      keyEdits.set(item.dataset.keyItem!, toStoredValue((e.target as HTMLTextAreaElement).value));
+      const keyId = closestKeyId(el as HTMLElement);
+      if (keyId === null) return;
+      keyEdits.set(keyId, toStoredValue((e.target as HTMLTextAreaElement).value));
     });
   });
 
@@ -1188,19 +1195,19 @@ function bindKeysEvents() {
     el.addEventListener("click", () => {
       const item = (el as HTMLElement).closest("[data-key-item]") as HTMLElement | null;
       const textarea = item?.querySelector("[data-key-value]") as HTMLTextAreaElement | null;
-      if (!item || !textarea) return;
-      handleKeySave(item.dataset.keyItem!, textarea.value, (el as HTMLElement).dataset.force === "1");
+      const keyId = closestKeyId(el as HTMLElement);
+      if (keyId === null || !textarea) return;
+      handleKeySave(keyId, textarea.value, (el as HTMLElement).dataset.force === "1");
     });
   });
 
   // 충돌 시 내 수정 내용을 버리고 Lokalise 최신 값으로 되돌리기
   document.querySelectorAll("[data-action='use-latest']").forEach((el) => {
     el.addEventListener("click", () => {
-      const item = (el as HTMLElement).closest("[data-key-item]") as HTMLElement | null;
-      if (!item) return;
-      const keyName = item.dataset.keyItem!;
-      keyEdits.delete(keyName);
-      keyConflicts.delete(keyName);
+      const keyId = closestKeyId(el as HTMLElement);
+      if (keyId === null) return;
+      keyEdits.delete(keyId);
+      keyConflicts.delete(keyId);
       render();
     });
   });
@@ -1247,6 +1254,14 @@ function bindBulkEvents() {
 }
 
 // ─── Helpers ───
+/** key 검색 결과 행의 lokaliseKeyId 를 DOM에서 읽어온다 */
+function closestKeyId(el: HTMLElement): number | null {
+  const item = el.closest("[data-key-item]") as HTMLElement | null;
+  if (!item) return null;
+  const keyId = Number(item.dataset.keyItem);
+  return Number.isFinite(keyId) ? keyId : null;
+}
+
 /** 쉼표로 구분된 태그 입력을 배열로 변환 */
 function parseTags(raw: string): string[] {
   return raw
