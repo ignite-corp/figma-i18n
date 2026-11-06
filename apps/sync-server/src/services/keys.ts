@@ -4,6 +4,7 @@ import { loadConfig, resolveProjectId } from "../config";
 import { getLokaliseClient } from "./cache";
 import { translateEnToFr, isEnglishLocale, isFrenchLocale } from "./translation";
 import { logger } from "../lib/logger";
+import { normalizeLineBreaks } from "../lib/text";
 import { buildKeyTags } from "./tags";
 
 const config = loadConfig();
@@ -107,13 +108,14 @@ export async function updateKeyValue(input: {
     return { status: "conflict", key: target };
   }
 
+  const value = normalizeLineBreaks(input.value);
   const buildTranslations = await createTranslationBuilder(lokalise, {
-    [input.keyName]: input.value,
+    [input.keyName]: value,
   });
 
   const key = await applyKeyUpdate({
     target,
-    value: input.value,
+    value,
     projectId,
     lokalise,
     buildTranslations,
@@ -181,7 +183,8 @@ export async function bulkUpsertKeys(input: {
   const creates: BulkKeyItem[] = [];
   const updates: Array<{ item: BulkKeyItem; target: KeyEntry }> = [];
 
-  for (const item of input.items) {
+  for (const rawItem of input.items) {
+    const item = { ...rawItem, value: normalizeLineBreaks(rawItem.value) };
     const candidates = live.get(item.keyName) ?? [];
 
     if (item.mode === "create") {

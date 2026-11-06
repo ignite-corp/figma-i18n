@@ -5,6 +5,7 @@ import { getLokaliseClient } from "./cache";
 import { logger } from "../lib/logger";
 import { isFrenchLocale, isEnglishLocale } from "./translation";
 import { buildKeyTags } from "./tags";
+import { normalizeLineBreaks } from "../lib/text";
 
 const config = loadConfig();
 
@@ -68,7 +69,9 @@ function buildTranslations(
   if (isEnglishLocale(baseLanguage) && frTranslations) {
     return allLanguages.map((lang) => ({
       language_iso: lang,
-      translation: isFrenchLocale(lang) ? (frTranslations[lang] ?? sourceText) : sourceText,
+      translation: isFrenchLocale(lang)
+        ? normalizeLineBreaks(frTranslations[lang] ?? sourceText)
+        : sourceText,
     }));
   }
 
@@ -89,7 +92,7 @@ async function processSingleItem(
       if (!item.keyName) throw new Error("keyName is required for create_new");
 
       // value가 명시적으로 지정된 경우 해당 값 사용, 없으면 Figma 텍스트 사용
-      const sourceText = item.value ?? item.text;
+      const sourceText = normalizeLineBreaks(item.value ?? item.text);
 
       const translations = buildTranslations(
         lokalise.baseLanguage, targetLanguages, sourceText, item.frTranslations,
@@ -198,7 +201,7 @@ async function processSingleItem(
     case "update_source": {
       if (!item.keyName) throw new Error("keyName is required for update_source");
 
-      const sourceText = item.value ?? item.text;
+      const sourceText = normalizeLineBreaks(item.value ?? item.text);
 
       // Lokalise key ID 찾기 (캐시에서)
       const cachedRows = await prisma.lokaliseKeyCache.findMany({
