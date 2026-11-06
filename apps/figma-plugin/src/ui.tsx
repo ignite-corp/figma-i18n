@@ -70,6 +70,9 @@ let savingKeyId: number | null = null;
 const keyEdits: Map<number, string> = new Map();
 // Lokalise에서 이미 변경되어 저장이 보류된 key
 const keyConflicts: Set<number> = new Set();
+// 개행을 \n 글자로 보는 읽기 전용 모드. 이 모드에서는 수정·저장할 수 없다
+// (서버가 글자 \n 을 실제 개행으로 바꿔 저장하므로, 편집을 허용하면 화면과 저장 결과가 달라진다)
+let showRawValue = false;
 
 // ─── JSON 대량 추가 탭 state ───
 type BulkStatus = "new" | "changed" | "same";
@@ -871,6 +874,13 @@ function renderKeysTab(): string {
           ${isKeySearching ? "검색 중..." : "검색"}
         </button>
       </div>
+      <label class="raw-toggle">
+        <input type="checkbox" id="key-raw-toggle" ${showRawValue ? "checked" : ""} />
+        개행을 \\n 으로 보기 (읽기 전용)
+      </label>
+      ${showRawValue
+        ? `<div class="raw-toggle-notice">개행 보기 모드에서는 수정·저장할 수 없습니다. 수정하려면 체크를 해제하세요.</div>`
+        : ""}
     </div>
   `;
 
@@ -902,13 +912,15 @@ function renderKeyItem(key: KeyEntry): string {
   const conflict = keyConflicts.has(key.lokaliseKeyId);
   const edited = keyEdits.get(key.lokaliseKeyId);
   const value = edited !== undefined ? edited : key.baseValue;
+  // 보기 모드에서는 화면에만 이스케이프된 문자열을 보여준다. 읽기 전용이라 저장에는 쓰이지 않는다
+  const shown = showRawValue ? toRawView(value) : value;
 
   return `
     <div class="node-item ${conflict ? "node-item--conflict" : ""}" data-key-item="${key.lokaliseKeyId}">
       <div class="node-item-header">
         <code class="key-name">${escapeHtml(key.keyName)}</code>
         <button class="btn btn-sm ${conflict ? "btn-danger" : "btn-primary"}" data-action="save-key"
-          ${conflict ? 'data-force="1"' : ""} ${savingKeyId !== null ? "disabled" : ""}>
+          ${conflict ? 'data-force="1"' : ""} ${savingKeyId !== null || showRawValue ? "disabled" : ""}>
           ${saving ? "저장 중..." : conflict ? "덮어쓰기" : "저장"}
         </button>
       </div>
@@ -920,7 +932,7 @@ function renderKeyItem(key: KeyEntry): string {
           </div>`
         : ""}
       <div class="value-input-group">
-        <textarea class="value-input" data-key-value placeholder="번역 텍스트" rows="2">${escapeHtml(value)}</textarea>
+        <textarea class="value-input" data-key-value placeholder="번역 텍스트" rows="2" ${showRawValue ? "disabled" : ""}>${escapeHtml(shown)}</textarea>
       </div>
     </div>
   `;
@@ -1180,6 +1192,11 @@ function bindKeysEvents() {
     handleKeySearch();
   });
 
+  document.getElementById("key-raw-toggle")?.addEventListener("change", (e) => {
+    showRawValue = (e.target as HTMLInputElement).checked;
+    render();
+  });
+
   // 입력 중에는 렌더하지 않고 state만 갱신 (다른 행 저장 시 입력 내용 유실 방지)
   document.querySelectorAll("[data-key-value]").forEach((el) => {
     el.addEventListener("input", (e) => {
@@ -1270,6 +1287,18 @@ function parseTags(raw: string): string[] {
 
 function showNotify(message: string) {
   emit("NOTIFY", { message });
+}
+
+/**
+ * 개행을 \n 글자로 보여주는 표시용 변환 (개행 보기 모드에서만 사용, 읽기 전용).
+ * 실제 개행은 \n, 캐리지리턴은 \r로 보이게 하고, 값에 원래 들어 있던 백슬래시는 \\로 써서
+ * "실제 개행"과 "리터럴 \n 두 글자"를 구분할 수 있게 한다.
+ */
+function toRawView(str: string): string {
+  return str
+    .replace(/\\/g, "\\\\")
+    .replace(/\r/g, "\\r")
+    .replace(/\n/g, "\\n");
 }
 
 function escapeHtml(str: string): string {
