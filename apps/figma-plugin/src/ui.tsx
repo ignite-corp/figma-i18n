@@ -307,8 +307,13 @@ async function handleSync() {
       tags: parseTags(tagInput),
     });
 
-    if (pluginDataUpdates.length > 0) {
-      emit("SAVE_MAPPINGS_BULK", pluginDataUpdates);
+    // 서버에서 실패한 항목은 노드에 key를 연결하지 않는다
+    const succeededNodeIds = new Set(
+      response.results.filter((r) => r.success).map((r) => r.nodeId),
+    );
+    const succeededUpdates = pluginDataUpdates.filter((u) => succeededNodeIds.has(u.nodeId));
+    if (succeededUpdates.length > 0) {
+      emit("SAVE_MAPPINGS_BULK", succeededUpdates);
     }
 
     showNotify(

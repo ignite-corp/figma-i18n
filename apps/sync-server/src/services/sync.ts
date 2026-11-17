@@ -110,7 +110,12 @@ async function processSingleItem(
         ],
       });
 
+      // 이름이 이미 있는 key 등은 200 + errors[]로 돌아오므로 응답을 직접 확인해야 한다
       const createdKey = response.keys[0];
+      if (!createdKey) {
+        const reason = response.errors?.[0]?.message ?? "응답에 생성된 key가 없습니다";
+        throw new Error(`Lokalise key 생성 실패 (${item.keyName}): ${reason}`);
+      }
 
       // DB: 매핑 저장
       await prisma.figmaKeyMapping.upsert({
@@ -132,25 +137,23 @@ async function processSingleItem(
       });
 
       // 캐시에도 추가
-      if (createdKey) {
-        await prisma.lokaliseKeyCache.upsert({
-          where: { projectId_lokaliseKeyId: { projectId, lokaliseKeyId: createdKey.key_id } },
-          update: {
-            keyName: item.keyName,
-            baseValue: sourceText,
-            fetchedAt: new Date(),
-          },
-          create: {
-            lokaliseKeyId: createdKey.key_id,
-            projectId,
-            keyName: item.keyName,
-            baseValue: sourceText,
-            platforms: ["web"],
-            tags,
-            fetchedAt: new Date(),
-          },
-        });
-      }
+      await prisma.lokaliseKeyCache.upsert({
+        where: { projectId_lokaliseKeyId: { projectId, lokaliseKeyId: createdKey.key_id } },
+        update: {
+          keyName: item.keyName,
+          baseValue: sourceText,
+          fetchedAt: new Date(),
+        },
+        create: {
+          lokaliseKeyId: createdKey.key_id,
+          projectId,
+          keyName: item.keyName,
+          baseValue: sourceText,
+          platforms: ["web"],
+          tags,
+          fetchedAt: new Date(),
+        },
+      });
 
       // History 기록
       await recordHistory(figmaFileId, item.nodeId, item.keyName, "KEY_CREATED", null, sourceText, triggeredBy);
@@ -160,7 +163,7 @@ async function processSingleItem(
         success: true,
         action: item.action,
         keyName: item.keyName,
-        lokaliseKeyId: createdKey?.key_id,
+        lokaliseKeyId: createdKey.key_id,
       };
     }
 
@@ -221,12 +224,11 @@ async function processSingleItem(
         const translations = buildTranslations(
           lokalise.baseLanguage, targetLanguages, sourceText, item.frTranslations,
         );
-        const targetOnlyTranslations = translations
-          .filter((t) => t.language_iso !== lokalise.baseLanguage)
-          .map((t) => ({ ...t, is_unverified: isFrenchLocale(t.language_iso) }));
-
         await lokalise.updateKeyTranslation(cached.lokaliseKeyId, {
-          translations: targetOnlyTranslations,
+          translations: translations.map((t) => ({
+            ...t,
+            is_unverified: isFrenchLocale(t.language_iso),
+          })),
         });
 
         // 캐시 업데이트

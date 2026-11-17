@@ -8,6 +8,7 @@ import { findMatches } from "i18n-matcher";
 import { getCachedKeys } from "./cache";
 import { prisma } from "../lib/prisma";
 import { loadConfig, resolveProjectId } from "../config";
+import { normalizeLineBreaks } from "../lib/text";
 
 const config = loadConfig();
 
@@ -34,13 +35,21 @@ export async function matchNodes(
     existingMappings.map((m) => [m.nodeId, m]),
   );
 
+  // key별 Lokalise 현재 base 값 (이름이 같은 key가 여러 건일 수 있어 배열로 보관)
+  const lokaliseValues = new Map<string, string[]>();
+  for (const k of cachedKeys) {
+    const values = lokaliseValues.get(k.keyName) ?? [];
+    values.push(normalizeLineBreaks(k.baseValue));
+    lokaliseValues.set(k.keyName, values);
+  }
+
   for (const node of nodes) {
     const dbMapping = mappingMap.get(node.nodeId);
     const pluginMapping = node.existingMapping;
 
     // 매핑 정보 결정 (plugin 우선, 없으면 DB)
     const existingKey = pluginMapping?.key ?? dbMapping?.keyName;
-    const existingSourceText = pluginMapping?.sourceText ?? dbMapping?.sourceText;
+    let existingSourceText = pluginMapping?.sourceText ?? dbMapping?.sourceText;
 
     let status: NodeStatus;
     let candidates: MatchCandidate[] = [];
@@ -48,7 +57,17 @@ export async function matchNodes(
 
     if (existingKey && existingSourceText) {
       // 이미 매핑된 노드
-      if (node.text === existingSourceText) {
+      // Lokalise 캐시에 key가 있으면 실제 값과 비교한다 (기록된 sourceText는 틀어져 있을 수 있다)
+      const liveValues = lokaliseValues.get(existingKey);
+      if (liveValues) {
+        if (liveValues.includes(normalizeLineBreaks(node.text))) {
+          status = "matched";
+        } else {
+          status = "changed";
+          // diff에 Lokalise 실제 값을 보여준다
+          if (liveValues.length === 1) existingSourceText = liveValues[0];
+        }
+      } else if (node.text === existingSourceText) {
         status = "matched";
       } else {
         status = "changed";
