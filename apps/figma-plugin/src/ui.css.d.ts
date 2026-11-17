@@ -54,6 +54,8 @@ declare const styles: {
   readonly "project-selector-label": string;
   readonly "project-tab": string;
   readonly "project-toggle": string;
+  readonly "raw-toggle": string;
+  readonly "raw-toggle-notice": string;
   readonly "result-summary": string;
   readonly "search-bar": string;
   readonly "search-input": string;
